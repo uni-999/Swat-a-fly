@@ -22,6 +22,7 @@ const BODY_ITEMS = {
   APPLE: { color: "#ff5f6a", deltaSegments: 2 },
   CACTUS: { color: "#4fd17b", deltaSegments: -2 },
 };
+const SNAKE_SPRITES_BASE_PATH = "assets/sprites/snakes";
 
 const SNAKES = [
   {
@@ -57,6 +58,22 @@ const SNAKES = [
     body: { segments: 15, spacing: 7.1, waveAmp: 5.3, waveFreq: 1.32, waveSpeed: 6.0, taper: 0.52 },
   },
 ];
+
+function snakeHeadTextureKey(snakeId) {
+  return `snake_head_${snakeId}`;
+}
+
+function snakeSegmentTextureKey(snakeId) {
+  return `snake_segment_${snakeId}`;
+}
+
+function snakeHeadTexturePath(snakeId) {
+  return `${SNAKE_SPRITES_BASE_PATH}/${snakeId}/head.png`;
+}
+
+function snakeSegmentTexturePath(snakeId) {
+  return `${SNAKE_SPRITES_BASE_PATH}/${snakeId}/segment.png`;
+}
 
 const PICKUP_TYPES = {
   BOOST: { name: "BOOST", color: "#44f084", durationMs: 2600 },
@@ -218,6 +235,16 @@ function initPhaser() {
       this.graphics = null;
       this.infoText = null;
       this.labelMap = new Map();
+      this.spriteSupportMap = new Map();
+      this.headSpriteMap = new Map();
+      this.segmentSpriteMap = new Map();
+    }
+
+    preload() {
+      for (const snake of SNAKES) {
+        this.load.image(snakeHeadTextureKey(snake.id), snakeHeadTexturePath(snake.id));
+        this.load.image(snakeSegmentTextureKey(snake.id), snakeSegmentTexturePath(snake.id));
+      }
     }
 
     create() {
@@ -229,6 +256,14 @@ function initPhaser() {
           color: "#dbe9ff",
         })
         .setDepth(30);
+
+      for (const snake of SNAKES) {
+        this.spriteSupportMap.set(snake.id, {
+          head: this.textures.exists(snakeHeadTextureKey(snake.id)),
+          segment: this.textures.exists(snakeSegmentTextureKey(snake.id)),
+        });
+      }
+
       state.raceScene = this;
     }
 
@@ -1152,7 +1187,8 @@ function renderRace(scene, race, nowMs) {
   drawCheckpoints(g, race.track);
   drawBodyItems(g, race.bodyItems);
   drawPickups(g, race.pickups);
-  drawRacers(g, race.racers);
+  drawRacers(scene, g, race.racers);
+  syncRacerRenderSprites(scene, race.racers, true);
   syncRacerLabels(scene, race.racers, true);
 
   const phaseText = race.phase === "countdown" ? "Countdown" : race.phase === "running" ? "Running" : "Finished";
@@ -1167,6 +1203,7 @@ function renderRace(scene, race, nowMs) {
 function renderIdle(scene) {
   drawBackground(scene.graphics);
   scene.infoText.setVisible(false);
+  syncRacerRenderSprites(scene, [], false);
   syncRacerLabels(scene, [], false);
 }
 
@@ -1297,14 +1334,120 @@ function drawPickups(g, pickups) {
   }
 }
 
-function drawRacers(g, racers) {
+function drawRacers(scene, g, racers) {
   racers.forEach((racer) => {
-    drawBodySegments(g, racer);
+    if (!supportsSnakeSegmentSprite(scene, racer.typeId)) {
+      drawBodySegments(g, racer);
+    }
     drawTrail(g, racer);
   });
   racers.forEach((racer) => {
-    drawRacerBody(g, racer);
+    if (!supportsSnakeHeadSprite(scene, racer.typeId)) {
+      drawRacerBody(g, racer);
+    }
   });
+}
+
+function supportsSnakeHeadSprite(scene, snakeId) {
+  const support = scene.spriteSupportMap?.get(snakeId);
+  return Boolean(support && support.head);
+}
+
+function supportsSnakeSegmentSprite(scene, snakeId) {
+  const support = scene.spriteSupportMap?.get(snakeId);
+  return Boolean(support && support.segment);
+}
+
+function syncRacerRenderSprites(scene, racers, visible) {
+  const live = new Set();
+
+  for (const racer of racers) {
+    live.add(racer.id);
+    syncRacerHeadSprite(scene, racer, visible);
+    syncRacerSegmentSprites(scene, racer, visible);
+  }
+
+  scene.headSpriteMap.forEach((sprite, racerId) => {
+    if (!live.has(racerId) || !visible) {
+      sprite.setVisible(false);
+    }
+  });
+
+  scene.segmentSpriteMap.forEach((pool, racerId) => {
+    if (!live.has(racerId) || !visible) {
+      for (const sprite of pool) {
+        sprite.setVisible(false);
+      }
+    }
+  });
+}
+
+function syncRacerHeadSprite(scene, racer, visible) {
+  if (!supportsSnakeHeadSprite(scene, racer.typeId)) {
+    const existing = scene.headSpriteMap.get(racer.id);
+    if (existing) {
+      existing.setVisible(false);
+    }
+    return;
+  }
+
+  const key = snakeHeadTextureKey(racer.typeId);
+  let sprite = scene.headSpriteMap.get(racer.id);
+  if (!sprite) {
+    sprite = scene.add.image(0, 0, key).setDepth(23);
+    sprite.setOrigin(0.5, 0.5);
+    scene.headSpriteMap.set(racer.id, sprite);
+  } else if (sprite.texture.key !== key) {
+    sprite.setTexture(key);
+  }
+
+  sprite.setVisible(visible);
+  sprite.setPosition(racer.x, racer.y);
+  sprite.setRotation(racer.heading);
+  const headSize = 28;
+  sprite.setDisplaySize(headSize, headSize);
+  sprite.setAlpha(1);
+}
+
+function syncRacerSegmentSprites(scene, racer, visible) {
+  let pool = scene.segmentSpriteMap.get(racer.id);
+  if (!pool) {
+    pool = [];
+    scene.segmentSpriteMap.set(racer.id, pool);
+  }
+
+  if (!supportsSnakeSegmentSprite(scene, racer.typeId)) {
+    for (const sprite of pool) {
+      sprite.setVisible(false);
+    }
+    return;
+  }
+
+  const key = snakeSegmentTextureKey(racer.typeId);
+  const segments = racer.bodySegments || [];
+
+  for (let i = 0; i < segments.length; i += 1) {
+    const segment = segments[i];
+    let sprite = pool[i];
+    if (!sprite) {
+      sprite = scene.add.image(0, 0, key).setDepth(17);
+      sprite.setOrigin(0.5, 0.5);
+      pool.push(sprite);
+    } else if (sprite.texture.key !== key) {
+      sprite.setTexture(key);
+    }
+
+    sprite.setVisible(visible);
+    sprite.setPosition(segment.x, segment.y);
+    sprite.setRotation(segment.heading);
+    const size = Math.max(4, segment.radius * 2.25);
+    sprite.setDisplaySize(size, size);
+    sprite.setAlpha(segment.alpha);
+  }
+
+  for (let i = segments.length; i < pool.length; i += 1) {
+    pool[i].setVisible(false);
+  }
 }
 
 function drawBodySegments(g, racer) {

@@ -1,0 +1,81 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: infra/web/Dockerfile
+    container_name: snake-web
+    ports:
+      - "8080:80"
+    depends_on:
+      - match-server
+    restart: unless-stopped
+
+  match-server:
+    build:
+      context: .
+      dockerfile: match-server/Dockerfile
+    container_name: snake-match-server
+    environment:
+      PORT: "2567"
+      SERVER_TICK_RATE: "20"
+      RACE_MAX_MS: "180000"
+      NAKAMA_URL: "http://nakama:7350"
+      NAKAMA_HTTP_KEY: "${NAKAMA_HTTP_KEY:-dev-http-key}"
+      NAKAMA_RPC_ID: "submit_race_time"
+    ports:
+      - "2567:2567"
+    depends_on:
+      - nakama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:2567/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 4s
+      retries: 12
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: snake-postgres
+    environment:
+      POSTGRES_DB: "nakama"
+      POSTGRES_USER: "nakama"
+      POSTGRES_PASSWORD: "nakama"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nakama -d nakama"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  nakama:
+    image: heroiclabs/nakama:3.20.0
+    container_name: snake-nakama
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        /nakama/nakama migrate up --database.address "postgres://nakama:nakama@postgres:5432/nakama?sslmode=disable" && \
+        exec /nakama/nakama \
+          --name nakama1 \
+          --database.address "postgres://nakama:nakama@postgres:5432/nakama?sslmode=disable" \
+          --runtime.path /nakama/data/modules \
+          --socket.server_key "${NAKAMA_SERVER_KEY:-dev-server-key}" \
+          --runtime.http_key "${NAKAMA_HTTP_KEY:-dev-http-key}" \
+          --console.username "${NAKAMA_ADMIN_USER:-admin}" \
+          --console.password "${NAKAMA_ADMIN_PASSWORD:-adminadmin}" \
+          --logger.level INFO
+    volumes:
+      - ./backend/nakama/modules:/nakama/data/modules
+    ports:
+      - "7349:7349"
+      - "7350:7350"
+      - "7351:7351"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

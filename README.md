@@ -38,6 +38,20 @@
 - `кактус` уменьшает длину тела.
 - Поведение NPC: по ходу движения NPC стараются подбирать `яблоки`, если они находятся впереди по траектории и в достижимом радиусе.
 
+## Спрайты змей
+
+- Поддерживается подключение спрайтов головы и сегментов тела для каждого типа змеи.
+- Путь к файлам:
+- `assets/sprites/snakes/speedster/head.png`
+- `assets/sprites/snakes/speedster/segment.png`
+- `assets/sprites/snakes/handler/head.png`
+- `assets/sprites/snakes/handler/segment.png`
+- `assets/sprites/snakes/bully/head.png`
+- `assets/sprites/snakes/bully/segment.png`
+- `assets/sprites/snakes/trickster/head.png`
+- `assets/sprites/snakes/trickster/segment.png`
+- Если у типа змеи спрайтов нет, автоматически используется текущий векторный рендер (игра не ломается).
+
 ## Влияние длины тела на эффекты
 
 - При увеличении тела усиливаются полезные бафы (например, `BOOST`).
@@ -53,12 +67,71 @@
 
 - Игровая область (`race-stage`) увеличена примерно до `80%` окна браузера (адаптивно).
 
+## Docker Compose стек
+
+Проект собран в переносимый стек сервисов:
+
+- `web` — фронтенд (Nginx, статика игры).
+- `match-server` — Colyseus authoritative match-server.
+- `nakama` — backend для leaderboard/RPC.
+- `postgres` — база данных Nakama.
+
+## Запуск через Docker (рекомендуется)
+
+1. Скопировать переменные окружения:
+
+```bash
+cp .env.example .env
+```
+
+2. Поднять весь стек:
+
+```bash
+docker compose up --build
+```
+
+3. Сервисы будут доступны:
+
+- Игра: `http://localhost:8080`
+- Match-server health: `http://localhost:2567/healthz`
+- Nakama API: `http://localhost:7350`
+- Nakama Console: `http://localhost:7351`
+
+4. Остановить стек:
+
+```bash
+docker compose down
+```
+
+Полный сброс с удалением тома БД:
+
+```bash
+docker compose down -v
+```
+
 ## Как запустить
 
-1. Открыть `index.html` в браузере.
-2. Нажать `Play Offline`.
-3. Выбрать режим (`Классика` или `Отладка`) и змею.
-4. Нажать `Старт`.
+Рекомендуемый запуск — через локальный HTTP-сервер (так надежнее грузятся ассеты и спрайты).
+
+1. Открыть терминал в корне проекта (`.../_hackathon`).
+2. Запустить сервер одним из способов:
+
+```bash
+python -m http.server 5500
+```
+
+или
+
+```bash
+npx serve . -l 5500
+```
+
+3. Открыть в браузере `http://localhost:5500`.
+4. Нажать `Play Offline`.
+5. Выбрать режим (`Классика` или `Отладка`) и змею.
+6. Нажать `Старт`.
+
+Быстрый вариант для черновой проверки: можно открыть `index.html` напрямую, но для стабильной работы спрайтов и ассетов лучше использовать сервер.
 
 ## Правило по документации
 
