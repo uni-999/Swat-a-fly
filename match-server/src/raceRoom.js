@@ -11,6 +11,9 @@ function safeNumber(value, fallback = 0) {
 }
 
 export class RaceRoom extends Room {
+  // -----------------------------
+  // Room Lifecycle
+  // -----------------------------
   onCreate(options) {
     this.maxClients = 4;
     this.tickRate = Math.max(10, safeNumber(process.env.SERVER_TICK_RATE, 20));
@@ -87,6 +90,9 @@ export class RaceRoom extends Room {
     this.players.clear();
   }
 
+  // -----------------------------
+  // Input / Ready Handlers
+  // -----------------------------
   handleInput(client, payload) {
     const player = this.players.get(client.sessionId);
     if (!player || player.isBot || this.phase !== "running") {
@@ -151,6 +157,9 @@ export class RaceRoom extends Room {
     this.broadcastState();
   }
 
+  // -----------------------------
+  // Simulation
+  // -----------------------------
   simulate(dt, nowMs) {
     for (const player of this.players.values()) {
       if (player.finished) {
@@ -216,13 +225,15 @@ export class RaceRoom extends Room {
     });
   }
 
+  // -----------------------------
+  // Result Submission
+  // -----------------------------
   async submitResults() {
     if (this.resultsSubmitted) {
       return;
     }
-    this.resultsSubmitted = true;
-
     if (!this.nakamaClient || !this.nakamaClient.enabled) {
+      this.resultsSubmitted = true;
       return;
     }
 
@@ -230,12 +241,12 @@ export class RaceRoom extends Room {
       .filter((p) => Number.isFinite(p.finishTimeMs))
       .sort((a, b) => a.finishTimeMs - b.finishTimeMs);
 
+    let allSubmitted = true;
     for (const player of results) {
       if (player.resultSubmitted) {
         continue;
       }
-      player.resultSubmitted = true;
-      await this.nakamaClient.submitRaceTime({
+      const response = await this.nakamaClient.submitRaceTime({
         userId: player.userId,
         trackId: this.trackId,
         timeMs: player.finishTimeMs,
@@ -245,9 +256,34 @@ export class RaceRoom extends Room {
           phase: this.phase,
         },
       });
+
+      if (response?.ok) {
+        player.resultSubmitted = true;
+      } else {
+        allSubmitted = false;
+        console.warn("[match-server] result submit failed", {
+          roomId: this.roomId,
+          trackId: this.trackId,
+          userId: player.userId,
+          response,
+        });
+      }
+    }
+
+    this.resultsSubmitted = allSubmitted;
+    if (!allSubmitted) {
+      // Retry failed submissions; keep state until all results are accepted.
+      this.clock.setTimeout(() => {
+        this.submitResults().catch((error) => {
+          console.error("[match-server] submitResults retry failed:", error);
+        });
+      }, 5000);
     }
   }
 
+  // -----------------------------
+  // Snapshot Broadcasting
+  // -----------------------------
   buildSnapshot() {
     const players = Array.from(this.players.values())
       .map((p) => ({

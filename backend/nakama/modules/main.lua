@@ -1,6 +1,14 @@
 local nk = require("nakama")
 
-local TRACK_IDS = { "canyon_loop", "switchback_run", "twin_fang" }
+local TRACK_IDS = {
+  "canyon_loop",
+  "switchback_run",
+  "twin_fang",
+  "dune_orbit",
+  "neon_delta",
+  "volcano_spiral",
+  "glacier_chicane"
+}
 
 local function ensure_leaderboards()
   for _, track_id in ipairs(TRACK_IDS) do
@@ -27,6 +35,12 @@ end
 
 local function rpc_submit_race_time(_context, payload)
   local data = nk.json_decode(payload or "{}")
+  if type(data) == "string" then
+    data = nk.json_decode(data)
+  end
+  if type(data) ~= "table" then
+    error("invalid payload")
+  end
   local owner_id = data.owner_id or data.user_id
   local user_id = data.user_id or owner_id
   local username = data.username or data.player_name or user_id

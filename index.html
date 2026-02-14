@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Змеиный Дрифт: Рывок</title>
+  <title>ПОЛЗУНКИ</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Exo+2:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="bg-noise"></div>
   <main class="app">
     <header class="app-header">
-      <h1>Змеиный Дрифт: Рывок</h1>
+      <h1>ПОЛЗУНКИ</h1>
       <p>Аркадная гонка змей: классика 1+3 бота и режим отладки 4 бота</p>
     </header>
 
@@ -56,32 +56,40 @@
     <section id="screen-race" class="screen">
       <div class="race-layout">
         <div id="race-stage" aria-label="Игровое поле"></div>
-        <aside class="hud-panel">
-          <div class="hud-box">
-            <span>Время</span>
-            <strong id="hud-timer">00:00.000</strong>
+        <div class="hud-overlay-layer" aria-hidden="true">
+          <div class="hud-cluster hud-cluster--tl">
+            <div class="hud-box hud-box--time">
+              <span>Время</span>
+              <strong id="hud-timer">00:00.000</strong>
+            </div>
+            <div class="hud-box hud-box--speed">
+              <span>Скорость</span>
+              <strong id="hud-speed">0 км/ч</strong>
+            </div>
           </div>
-          <div class="hud-box">
-            <span>Скорость</span>
-            <strong id="hud-speed">0 км/ч</strong>
+          <div class="hud-cluster hud-cluster--tr">
+            <div class="hud-box hud-box--position">
+              <span>Позиция</span>
+              <strong id="hud-position">P1/4</strong>
+            </div>
+            <div class="hud-box hud-box--effect">
+              <span>Эффект</span>
+              <strong id="hud-effect">нет</strong>
+            </div>
           </div>
-          <div class="hud-box">
-            <span>Позиция</span>
-            <strong id="hud-position">P1/4</strong>
+          <div class="hud-cluster hud-cluster--br">
+            <div class="hud-box standings hud-box--standings">
+              <span>Порядок</span>
+              <ol id="hud-standings"></ol>
+            </div>
           </div>
-          <div class="hud-box">
-            <span>Эффект</span>
-            <strong id="hud-effect">нет</strong>
+          <div class="hud-cluster hud-cluster--bl">
+            <div class="controls">
+              <p>Управление: W/A/S/D или стрелки</p>
+              <p>R: рестарт трассы</p>
+            </div>
           </div>
-          <div class="hud-box standings">
-            <span>Порядок</span>
-            <ol id="hud-standings"></ol>
-          </div>
-          <div class="controls">
-            <p>Управление: W/A/S/D или стрелки</p>
-            <p>R: рестарт трассы</p>
-          </div>
-        </aside>
+        </div>
       </div>
       <div id="race-overlay" class="race-overlay"></div>
     </section>

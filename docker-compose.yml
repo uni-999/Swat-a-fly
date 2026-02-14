@@ -23,6 +23,10 @@ services:
       NAKAMA_URL: "http://nakama:7350"
       NAKAMA_HTTP_KEY: "${NAKAMA_HTTP_KEY:-dev-http-key}"
       NAKAMA_RPC_ID: "submit_race_time"
+      RACE_DURATION_STATS_FILE: "/app/_data/race-duration-stats.json"
+      RACE_DURATION_STATS_EMA_ALPHA: "0.24"
+    volumes:
+      - "./_data/match-server:/app/_data"
     ports:
       - "2567:2567"
     depends_on:
