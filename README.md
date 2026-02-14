@@ -139,6 +139,14 @@ docker compose down -v
 Для bind mount (`POSTGRES_DATA_DIR`) команда выше не удаляет файлы БД в папке хоста.
 Для bind mount `./_data/postgres` команда выше не удаляет файлы БД в папке проекта.
 
+Если на macOS видишь ошибку `dependency postgres failed to start`, проверь, что `./_data/postgres` пустая при первом запуске (без `.gitkeep` и прочих файлов), затем подними Postgres заново:
+
+```bash
+rm -f ./_data/postgres/.gitkeep
+docker compose up -d postgres
+docker compose logs --tail=80 postgres
+```
+
 ## Локальный запуск без Docker (опционально)
 
 Этот режим нужен только для быстрого офлайн-прогона фронтенда без серверной части.
