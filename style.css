@@ -166,6 +166,26 @@ body {
   margin-top: 14px;
 }
 
+.mode-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.btn.mode-active {
+  color: #072022;
+  background: linear-gradient(120deg, #73ff96, #b5ffd1);
+  border-color: rgba(115, 255, 150, 0.84);
+  box-shadow: 0 8px 20px rgba(115, 255, 150, 0.2);
+}
+
+.mode-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 .race-layout {
   display: grid;
   grid-template-columns: auto 260px;

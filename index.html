@@ -14,7 +14,7 @@
   <main class="app">
     <header class="app-header">
       <h1>Snake Drift Rush</h1>
-      <p>Аркадная гонка змей: debug-режим с 4 NPC для быстрой отладки</p>
+      <p>Аркадная гонка змей: классика 1+3 NPC и режим отладки 4 NPC</p>
     </header>
 
     <section id="screen-main" class="screen active">
@@ -29,6 +29,11 @@
     <section id="screen-snake" class="screen">
       <div class="panel">
         <h2>Выбор змеи</h2>
+        <div class="mode-switch">
+          <button id="mode-classic" class="btn ghost">Классика: 1 игрок + 3 NPC</button>
+          <button id="mode-debug" class="btn ghost">Отладка: 4 NPC</button>
+        </div>
+        <p id="mode-note" class="mode-note"></p>
         <div id="snake-cards" class="card-grid"></div>
         <div class="actions">
           <button id="snake-back" class="btn ghost">Назад</button>

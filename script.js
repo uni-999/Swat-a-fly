@@ -1,7 +1,11 @@
 "use strict";
 
-const DEBUG_NPC_ONLY = true;
 const TOTAL_RACERS = 4;
+const OFFLINE_MODES = {
+  CLASSIC: "classic_1p_3npc",
+  DEBUG: "debug_4npc",
+};
+const DEFAULT_OFFLINE_MODE = OFFLINE_MODES.DEBUG;
 const CANVAS_WIDTH = 980;
 const CANVAS_HEIGHT = 620;
 const TAU = Math.PI * 2;
@@ -142,6 +146,9 @@ const ui = {
     results: document.getElementById("screen-results"),
   },
   snakeCards: document.getElementById("snake-cards"),
+  modeClassic: document.getElementById("mode-classic"),
+  modeDebug: document.getElementById("mode-debug"),
+  modeNote: document.getElementById("mode-note"),
   trackCards: document.getElementById("track-cards"),
   snakeNext: document.getElementById("snake-next"),
   trackStart: document.getElementById("track-start"),
@@ -161,6 +168,7 @@ const state = {
   selectedSnakeId: null,
   selectedTrackId: null,
   race: null,
+  offlineMode: DEFAULT_OFFLINE_MODE,
   lastResults: [],
   keyMap: new Set(),
   toastTimeout: null,
@@ -174,8 +182,33 @@ function bootstrap() {
   wireUi();
   renderSnakeCards();
   renderTrackCards();
+  updateOfflineModeUi();
   showScreen("main");
   initPhaser();
+}
+
+function isDebugMode() {
+  return state.offlineMode === OFFLINE_MODES.DEBUG;
+}
+
+function setOfflineMode(mode) {
+  state.offlineMode = mode;
+  updateOfflineModeUi();
+}
+
+function updateOfflineModeUi() {
+  const classicActive = state.offlineMode === OFFLINE_MODES.CLASSIC;
+  if (ui.modeClassic) {
+    ui.modeClassic.classList.toggle("mode-active", classicActive);
+  }
+  if (ui.modeDebug) {
+    ui.modeDebug.classList.toggle("mode-active", !classicActive);
+  }
+  if (ui.modeNote) {
+    ui.modeNote.textContent = classicActive
+      ? "Режим PRD: вы управляете змеей, остальные 3 — NPC."
+      : "Режим отладки: все 4 змеи на автопилоте.";
+  }
 }
 
 function initPhaser() {
@@ -231,6 +264,13 @@ function wireUi() {
   document.getElementById("btn-online").addEventListener("click", () => showToast("Онлайн модуль в следующем шаге (E3)."));
   document.getElementById("btn-leaderboards").addEventListener("click", () => showToast("Authoritative leaderboard будет добавлен через сервер."));
   document.getElementById("btn-settings").addEventListener("click", () => showToast("Настройки появятся после стабилизации core-loop."));
+
+  if (ui.modeClassic) {
+    ui.modeClassic.addEventListener("click", () => setOfflineMode(OFFLINE_MODES.CLASSIC));
+  }
+  if (ui.modeDebug) {
+    ui.modeDebug.addEventListener("click", () => setOfflineMode(OFFLINE_MODES.DEBUG));
+  }
 
   document.getElementById("snake-back").addEventListener("click", () => showScreen("main"));
   document.getElementById("snake-next").addEventListener("click", () => showScreen("track"));
@@ -370,15 +410,18 @@ function startRace(trackId) {
   if (!trackDef) {
     return;
   }
+  const debugMode = isDebugMode();
   const selectedSnake = SNAKES.find((item) => item.id === state.selectedSnakeId) || SNAKES[0];
-  state.race = createRaceState(trackDef, selectedSnake);
+  state.race = createRaceState(trackDef, selectedSnake, debugMode);
   showScreen("race");
-  if (DEBUG_NPC_ONLY) {
+  if (debugMode) {
     showToast("DEBUG: 4 NPC автопилот. Быстрая отладка симуляции.");
+  } else {
+    showToast("Классический оффлайн: 1 игрок + 3 NPC.");
   }
 }
 
-function createRaceState(trackDef, selectedSnake) {
+function createRaceState(trackDef, selectedSnake, debugMode) {
   const track = buildTrackRuntime(trackDef);
   const racers = [];
   const slotOffsets = [-22, -8, 8, 22];
@@ -394,7 +437,7 @@ function createRaceState(trackDef, selectedSnake) {
 
     const racer = {
       id: `racer_${i + 1}`,
-      name: DEBUG_NPC_ONLY ? (i === 0 ? "NPC Probe" : profile.name) : i === 0 ? "You" : profile.name,
+      name: debugMode ? (i === 0 ? "NPC Probe" : profile.name) : i === 0 ? "Вы" : profile.name,
       typeId: snake.id,
       color: snake.color,
       stats: snake.stats,
@@ -402,7 +445,7 @@ function createRaceState(trackDef, selectedSnake) {
       baseBodySegments: snake.body.segments,
       lengthBonusSegments: 0,
       profile,
-      isPlayer: !DEBUG_NPC_ONLY && i === 0,
+      isPlayer: !debugMode && i === 0,
       x: spawn.x + normal.x * offset,
       y: spawn.y + normal.y * offset,
       heading: Math.atan2(spawn.tangent.y, spawn.tangent.x),
@@ -551,7 +594,7 @@ function updateRace(race, nowMs, dt) {
     if (racer.finished) {
       continue;
     }
-    const control = racer.isPlayer && !DEBUG_NPC_ONLY ? readPlayerControl() : buildNpcControl(race, racer);
+    const control = racer.isPlayer ? readPlayerControl() : buildNpcControl(race, racer);
     stepRacer(race, racer, control, nowMs, dt);
     updateCheckpointProgress(race, racer, nowMs);
     checkPickupCollection(race, racer, nowMs);
@@ -890,7 +933,9 @@ function buildNpcControl(race, racer) {
   const projection = racer.lastProjection || projectOnTrack(race.track, racer.x, racer.y);
   const lookAheadDistance = racer.profile.lookAhead + racer.speed * 0.32;
   const targetFraction = mod1(projection.tNorm + lookAheadDistance / race.track.totalLength);
-  const target = sampleTrack(race.track, targetFraction);
+  const trackTarget = sampleTrack(race.track, targetFraction);
+  const appleTarget = findNpcAppleTarget(race, racer, projection);
+  const target = blendNpcTarget(trackTarget, appleTarget, racer);
   const desiredHeading = Math.atan2(target.y - racer.y, target.x - racer.x);
   const angle = shortestAngle(racer.heading, desiredHeading);
 
@@ -908,6 +953,41 @@ function buildNpcControl(race, racer) {
     throttle,
     brake,
     turn: clamp(angle * racer.profile.steerGain, -1, 1),
+  };
+}
+
+function findNpcAppleTarget(race, racer, racerProjection) {
+  let best = null;
+  for (const item of race.bodyItems) {
+    if (!item.active || item.type !== "APPLE") {
+      continue;
+    }
+    const itemProjection = projectOnTrack(race.track, item.x, item.y);
+    const forwardDelta = forwardTrackDelta(racerProjection.tNorm, itemProjection.tNorm);
+    if (forwardDelta <= 0.0001 || forwardDelta > 0.22) {
+      continue;
+    }
+    const dist = Math.hypot(item.x - racer.x, item.y - racer.y);
+    if (dist > 280) {
+      continue;
+    }
+    const score = forwardDelta * 0.8 + dist / 900;
+    if (!best || score < best.score) {
+      best = { item, score, dist };
+    }
+  }
+  return best ? best.item : null;
+}
+
+function blendNpcTarget(trackTarget, appleTarget, racer) {
+  if (!appleTarget) {
+    return trackTarget;
+  }
+  const appleDist = Math.hypot(appleTarget.x - racer.x, appleTarget.y - racer.y);
+  const appleWeight = clamp(1 - appleDist / 300, 0.18, 0.72);
+  return {
+    x: lerp(trackTarget.x, appleTarget.x, appleWeight),
+    y: lerp(trackTarget.y, appleTarget.y, appleWeight),
   };
 }
 
@@ -1464,6 +1544,10 @@ function normalizeVec(x, y) {
 
 function mod1(value) {
   return ((value % 1) + 1) % 1;
+}
+
+function forwardTrackDelta(fromNorm, toNorm) {
+  return toNorm >= fromNorm ? toNorm - fromNorm : 1 - fromNorm + toNorm;
 }
 
 function hexToInt(hex) {
