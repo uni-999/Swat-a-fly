@@ -37,8 +37,23 @@ const RESTART_DEBOUNCE_MS = 320;
 const BODY_CROSSING_START_GRACE_MS = 1200;
 const BODY_CROSSING_EFFECT_COOLDOWN_MS = 260;
 const ALWAYS_MOVE_SNAKE_IDS = new Set(["speedster", "handler"]);
-const ALWAYS_MOVE_MIN_SPEED = 34;
+const ALWAYS_MOVE_MIN_SPEED = 42;
 const ALWAYS_MOVE_OFFROAD_FACTOR = 0.72;
+const SPEEDSTER_BLOCK_EXTRA_TURN = 0.34;
+const SPEEDSTER_BLOCK_NUDGE = 4;
+const STALL_CHECK_WINDOW_MS = 780;
+const STALL_UNSTUCK_COOLDOWN_MS = 520;
+const STALL_MOVEMENT_EPSILON_SQ = 144;
+const STALL_PROGRESS_EPSILON = 0.0022;
+const STALL_UNSTUCK_LOOKAHEAD = 0.02;
+const STALL_UNSTUCK_NUDGE = 14;
+const STALL_UNSTUCK_GHOST_MS = 720;
+const DNF_LABEL = "Сход";
+const VENOM_PROJECTILE_RADIUS = 4.5;
+const VENOM_PROJECTILE_SPEED = 360;
+const VENOM_PROJECTILE_HIT_RADIUS = 13;
+const VENOM_PROJECTILE_MAX_LIFE_MS = 1800;
+const VENOM_SLOW_BASE_DURATION_MS = 1750;
 const TRACK_MUSIC = {
   canyon_loop: { key: "music_formula1", path: "assets/sounds/Formula1.mp3", volume: 0.34 },
 };
@@ -57,6 +72,7 @@ const SNAKES = [
     color: "#58f4ff",
     stats: { maxSpeed: 238, accel: 330, drag: 1.3, turnRate: 2.52, offroadPenalty: 0.63, mass: 1.0 },
     body: { segments: 18, spacing: 7.6, waveAmp: 4.8, waveFreq: 0.9, waveSpeed: 5.2, taper: 0.62 },
+    venom: { range: 128, cooldownMs: 2650, slowMul: 0.9, durationMs: 1450, speed: 385 },
   },
   {
     id: "handler",
@@ -65,6 +81,7 @@ const SNAKES = [
     color: "#9fff77",
     stats: { maxSpeed: 214, accel: 318, drag: 1.25, turnRate: 3.0, offroadPenalty: 0.67, mass: 1.0 },
     body: { segments: 16, spacing: 8.4, waveAmp: 3.2, waveFreq: 1.15, waveSpeed: 4.1, taper: 0.56 },
+    venom: { range: 168, cooldownMs: 2450, slowMul: 0.86, durationMs: 1650, speed: 360 },
   },
   {
     id: "bully",
@@ -73,6 +90,7 @@ const SNAKES = [
     color: "#ff8c7c",
     stats: { maxSpeed: 206, accel: 292, drag: 1.18, turnRate: 2.3, offroadPenalty: 0.71, mass: 1.35 },
     body: { segments: 22, spacing: 8.8, waveAmp: 2.6, waveFreq: 0.72, waveSpeed: 3.1, taper: 0.72 },
+    venom: { range: 182, cooldownMs: 2520, slowMul: 0.83, durationMs: 1800, speed: 342 },
   },
   {
     id: "trickster",
@@ -81,6 +99,7 @@ const SNAKES = [
     color: "#d6a7ff",
     stats: { maxSpeed: 222, accel: 305, drag: 1.22, turnRate: 2.72, offroadPenalty: 0.82, mass: 0.95 },
     body: { segments: 15, spacing: 7.1, waveAmp: 5.3, waveFreq: 1.32, waveSpeed: 6.0, taper: 0.52 },
+    venom: { range: 212, cooldownMs: 2200, slowMul: 0.81, durationMs: 1900, speed: 372 },
   },
 ];
 
@@ -110,10 +129,10 @@ const PICKUP_TYPES = {
 const PICKUP_ORDER = ["BOOST", "SHIELD", "OIL", "BOMB"];
 
 const NPC_PROFILES = [
-  { id: "careful", name: "NPC Careful", speedFactor: 0.88, lookAhead: 130, steerGain: 2.2, brakeAngle: 0.48 },
-  { id: "normal", name: "NPC Normal", speedFactor: 0.95, lookAhead: 145, steerGain: 2.45, brakeAngle: 0.56 },
-  { id: "aggressive", name: "NPC Aggro", speedFactor: 1.02, lookAhead: 160, steerGain: 2.65, brakeAngle: 0.66 },
-  { id: "maniac", name: "NPC Maniac", speedFactor: 1.08, lookAhead: 172, steerGain: 2.85, brakeAngle: 0.76 },
+  { id: "careful", name: "аккуратный", speedFactor: 0.88, lookAhead: 130, steerGain: 2.2, brakeAngle: 0.48 },
+  { id: "normal", name: "ровный", speedFactor: 0.95, lookAhead: 145, steerGain: 2.45, brakeAngle: 0.56 },
+  { id: "aggressive", name: "агро", speedFactor: 1.02, lookAhead: 160, steerGain: 2.65, brakeAngle: 0.66 },
+  { id: "maniac", name: "маньяк", speedFactor: 1.08, lookAhead: 172, steerGain: 2.85, brakeAngle: 0.76 },
 ];
 
 const TRACK_DEFS = [
@@ -172,6 +191,90 @@ const TRACK_DEFS = [
         const t = (i / steps) * TAU;
         const x = 490 + Math.sin(t) * 300 + Math.sin(3 * t) * 20;
         const y = 310 + Math.sin(2 * t) * 162 + Math.cos(t) * 12;
+        points.push({ x, y });
+      }
+      return points;
+    },
+  },
+  {
+    id: "dune_orbit",
+    name: "Dune Orbit",
+    subtitle: "Песчаный овал с волной по дугам",
+    roadWidth: 50,
+    outsideWidth: 90,
+    checkpointFractions: [0, 0.13, 0.24, 0.37, 0.51, 0.64, 0.78, 0.9],
+    pickupFractions: [0.03, 0.11, 0.19, 0.28, 0.4, 0.53, 0.66, 0.74, 0.83, 0.92],
+    createPoints: () => {
+      const points = [];
+      const steps = 210;
+      for (let i = 0; i < steps; i += 1) {
+        const t = (i / steps) * TAU;
+        const x = 490 + Math.cos(t) * 330 + Math.cos(3 * t + 0.5) * 34;
+        const y = 312 + Math.sin(t) * 190 + Math.sin(2 * t - 0.8) * 46 + Math.sin(5 * t) * 12;
+        points.push({ x, y });
+      }
+      return points;
+    },
+  },
+  {
+    id: "neon_delta",
+    name: "Neon Delta",
+    subtitle: "Три прямых зоны и резкие связки",
+    roadWidth: 49,
+    outsideWidth: 88,
+    checkpointFractions: [0, 0.1, 0.22, 0.35, 0.49, 0.61, 0.74, 0.87],
+    pickupFractions: [0.05, 0.14, 0.23, 0.31, 0.43, 0.56, 0.67, 0.75, 0.86, 0.94],
+    createPoints: () => {
+      const points = [];
+      const steps = 240;
+      for (let i = 0; i < steps; i += 1) {
+        const t = (i / steps) * TAU;
+        const triangleX = Math.asin(Math.sin(t)) * (2 / Math.PI);
+        const triangleY = Math.asin(Math.sin(t + 1.2)) * (2 / Math.PI);
+        const x = 490 + triangleX * 315 + Math.sin(4 * t) * 26 + Math.cos(2 * t - 0.2) * 20;
+        const y = 312 + triangleY * 170 + Math.sin(3 * t + 0.3) * 34;
+        points.push({ x, y });
+      }
+      return points;
+    },
+  },
+  {
+    id: "volcano_spiral",
+    name: "Вулканическая спираль",
+    subtitle: "Узкие дуги и пульсирующие связки в поворотах",
+    roadWidth: 50,
+    outsideWidth: 90,
+    checkpointFractions: [0, 0.09, 0.2, 0.32, 0.46, 0.6, 0.73, 0.86],
+    pickupFractions: [0.04, 0.12, 0.18, 0.27, 0.38, 0.49, 0.58, 0.69, 0.81, 0.93],
+    createPoints: () => {
+      const points = [];
+      const steps = 240;
+      for (let i = 0; i < steps; i += 1) {
+        const t = (i / steps) * TAU;
+        const x = 490 + Math.cos(t) * 308 + Math.cos(2 * t + 1.1) * 76 + Math.sin(5 * t + 0.2) * 14;
+        const y = 310 + Math.sin(t) * 176 + Math.sin(3 * t - 0.35) * 62 + Math.cos(4 * t + 0.6) * 11;
+        points.push({ x, y });
+      }
+      return points;
+    },
+  },
+  {
+    id: "glacier_chicane",
+    name: "Ледяная шикана",
+    subtitle: "Длинные прямые с быстрыми шиканами и перекладками",
+    roadWidth: 51,
+    outsideWidth: 92,
+    checkpointFractions: [0, 0.11, 0.23, 0.35, 0.48, 0.61, 0.74, 0.88],
+    pickupFractions: [0.03, 0.14, 0.22, 0.3, 0.41, 0.52, 0.63, 0.72, 0.84, 0.95],
+    createPoints: () => {
+      const points = [];
+      const steps = 250;
+      for (let i = 0; i < steps; i += 1) {
+        const t = (i / steps) * TAU;
+        const triX = Math.asin(Math.sin(t)) * (2 / Math.PI);
+        const triY = Math.asin(Math.sin(t + 1.5)) * (2 / Math.PI);
+        const x = 490 + triX * 324 + Math.sin(3 * t + 0.15) * 34 + Math.cos(5 * t) * 10;
+        const y = 312 + triY * 182 + Math.sin(2 * t + 0.65) * 28 + Math.sin(6 * t - 0.4) * 13;
         points.push({ x, y });
       }
       return points;
@@ -249,7 +352,7 @@ function updateOfflineModeUi() {
   }
   if (ui.modeNote) {
     ui.modeNote.textContent = classicActive
-      ? "Режим PRD: вы управляете змеей, остальные 3 — NPC."
+      ? "Режим PRD: вы управляете змеей, остальные 3 — боты."
       : "Режим отладки: все 4 змеи на автопилоте.";
   }
 }
@@ -497,9 +600,9 @@ function startRace(trackId) {
   showScreen("race");
   syncRaceMusic();
   if (debugMode) {
-    showToast("DEBUG: 4 NPC автопилот. Быстрая отладка симуляции.");
+    showToast("DEBUG: 4 бота на автопилоте. Быстрая отладка симуляции.");
   } else {
-    showToast("Классический оффлайн: 1 игрок + 3 NPC.");
+    showToast("Классический оффлайн: 1 игрок + 3 бота.");
   }
 }
 
@@ -519,11 +622,17 @@ function createRaceState(trackDef, selectedSnake, debugMode) {
 
     const racer = {
       id: `racer_${i + 1}`,
-      name: debugMode ? (i === 0 ? "NPC Probe" : profile.name) : i === 0 ? "Вы" : profile.name,
+      name: buildRacerDisplayName({
+        snake,
+        profile,
+        isPlayer: !debugMode && i === 0,
+        isProbe: debugMode && i === 0,
+      }),
       typeId: snake.id,
       color: snake.color,
       stats: snake.stats,
       bodyConfig: snake.body,
+      venomConfig: snake.venom,
       baseBodySegments: START_BODY_SEGMENTS,
       lengthBonusSegments: 0,
       profile,
@@ -553,6 +662,9 @@ function createRaceState(trackDef, selectedSnake, debugMode) {
       nextHungerTickMs: 0,
       tailBiteCooldownUntilMs: 0,
       nextBodyCrossEffectAtMs: 0,
+      stallWatch: null,
+      unstuckUntilMs: 0,
+      nextVenomShotAtMs: 0,
     };
     initializeRacerBodyHistory(racer);
     racers.push(racer);
@@ -567,6 +679,7 @@ function createRaceState(trackDef, selectedSnake, debugMode) {
     racers,
     pickups,
     bodyItems,
+    venomShots: [],
     phase: "countdown",
     createdAtMs: performance.now(),
     countdownStartMs: performance.now(),
@@ -578,6 +691,25 @@ function createRaceState(trackDef, selectedSnake, debugMode) {
     standings: [],
     resultsPushed: false,
   };
+}
+
+function buildRacerDisplayName({ snake, profile, isPlayer, isProbe }) {
+  const snakeToken = normalizeNameToken(snake?.id || "snake");
+  if (isPlayer) {
+    return `игрок_${snakeToken}`;
+  }
+  const profileSource = isProbe ? "проба" : profile?.name || profile?.id || "бот";
+  const profileToken = normalizeNameToken(profileSource);
+  return `бот_${profileToken}_${snakeToken}`;
+}
+
+function normalizeNameToken(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9а-яё_-]/gi, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function createPickups(track) {
@@ -731,9 +863,11 @@ function updateRace(race, nowMs, dt) {
     if (racer.finished) {
       continue;
     }
-    const control = racer.isPlayer ? readPlayerControl() : buildNpcControl(race, racer);
+    const control = racer.isPlayer ? readPlayerControl() : buildNpcControl(race, racer, nowMs);
     stepRacer(race, racer, control, nowMs, dt);
     applyBodyCrossingRules(race, racer, nowMs);
+    preventRacerStall(race, racer, nowMs);
+    maybeShootVenom(race, racer, control, nowMs);
     if (racer.finished) {
       continue;
     }
@@ -742,6 +876,7 @@ function updateRace(race, nowMs, dt) {
     checkBodyItemCollection(race, racer, nowMs);
   }
 
+  updateVenomShots(race, nowMs, dt);
   resolveRacerCollisions(race, nowMs);
   updateBodySegmentsForRace(race, nowMs);
   race.standings = computeStandings(race);
@@ -804,7 +939,7 @@ function renderResultsTable() {
       <td>${row.rank}</td>
       <td>${row.name}</td>
       <td>${row.snake}</td>
-      <td>${Number.isFinite(row.timeMs) ? formatMs(row.timeMs) : "DNF"}</td>
+      <td>${Number.isFinite(row.timeMs) ? formatMs(row.timeMs) : DNF_LABEL}</td>
     `;
     ui.resultsBody.appendChild(tr);
   }
@@ -916,7 +1051,7 @@ function eliminateRacerFromExhaustion(racer, source = "STARVATION") {
   racer.speed = 0;
   racer.effects = [];
   racer.shieldCharges = 0;
-  racer.eliminationReason = source === "CACTUS" ? "DNF (истощение/кактус)" : "DNF (истощение)";
+  racer.eliminationReason = source === "CACTUS" ? `${DNF_LABEL} (истощение/кактус)` : `${DNF_LABEL} (истощение)`;
   if (racer.isPlayer) {
     showToast("Вы погибли от истощения (3/3 уменьшения).");
   }
@@ -955,9 +1090,13 @@ function applyPickup(race, racer, type, nowMs) {
   }
 }
 
-function addEffect(racer, type, durationMs, nowMs) {
+function addEffect(racer, type, durationMs, nowMs, extra = null) {
   removeEffect(racer, type);
-  racer.effects.push({ type, untilMs: nowMs + durationMs });
+  const effect = { type, untilMs: nowMs + durationMs };
+  if (extra && typeof extra === "object") {
+    Object.assign(effect, extra);
+  }
+  racer.effects.push(effect);
 }
 
 function removeEffect(racer, type) {
@@ -1073,7 +1212,13 @@ function stepRacer(race, racer, control, nowMs, dt) {
 }
 
 function shouldNeverStop(racer) {
-  return !racer.isPlayer && ALWAYS_MOVE_SNAKE_IDS.has(racer.typeId);
+  if (!racer || racer.finished) {
+    return false;
+  }
+  if (!racer.isPlayer) {
+    return true;
+  }
+  return ALWAYS_MOVE_SNAKE_IDS.has(racer.typeId);
 }
 
 function getLowBodySpeedFactor(racer) {
@@ -1105,6 +1250,10 @@ function getRacerModifiers(racer) {
       speedMul *= applyHarmfulMitigation(0.7, bodyInfluence.harmfulMitigation);
       accelMul *= applyHarmfulMitigation(0.72, bodyInfluence.harmfulMitigation);
       turnMul *= applyHarmfulMitigation(0.86, bodyInfluence.harmfulMitigation);
+    } else if (effect.type === "VENOM_SLOW") {
+      speedMul *= applyHarmfulMitigation(effect.speedMul ?? 0.86, bodyInfluence.harmfulMitigation);
+      accelMul *= applyHarmfulMitigation((effect.speedMul ?? 0.86) * 0.98, bodyInfluence.harmfulMitigation);
+      turnMul *= applyHarmfulMitigation(0.93, bodyInfluence.harmfulMitigation);
     }
   }
   return { speedMul, accelMul, turnMul };
@@ -1147,7 +1296,7 @@ function resetRacerToCheckpoint(race, racer) {
   initializeRacerBodyHistory(racer);
 }
 
-function buildNpcControl(race, racer) {
+function buildNpcControl(race, racer, nowMs) {
   const projection = racer.lastProjection || projectOnTrack(race.track, racer.x, racer.y);
   const lookAheadDistance = racer.profile.lookAhead + racer.speed * 0.32;
   const targetFraction = mod1(projection.tNorm + lookAheadDistance / race.track.totalLength);
@@ -1178,10 +1327,13 @@ function buildNpcControl(race, racer) {
     }
   }
 
+  const spit = canNpcShootVenom(race, racer, nowMs);
+
   return {
     throttle,
     brake,
     turn: clamp(angle * racer.profile.steerGain, -1, 1),
+    spit,
   };
 }
 
@@ -1224,8 +1376,149 @@ function blendNpcTarget(trackTarget, appleTarget, racer) {
   };
 }
 
+function getVenomConfig(racer) {
+  const base = racer.venomConfig || {};
+  return {
+    range: clamp(base.range ?? 150, 90, 260),
+    cooldownMs: clamp(base.cooldownMs ?? 2400, 900, 6000),
+    slowMul: clamp(base.slowMul ?? 0.86, 0.65, 0.95),
+    durationMs: clamp(base.durationMs ?? VENOM_SLOW_BASE_DURATION_MS, 800, 4200),
+    speed: clamp(base.speed ?? VENOM_PROJECTILE_SPEED, 240, 520),
+  };
+}
+
+function canNpcShootVenom(race, racer, nowMs) {
+  if (racer.finished || race.phase !== "running") {
+    return false;
+  }
+  if (racer.speed < 18 || race.racers.length < 2) {
+    return false;
+  }
+  if (nowMs < (racer.nextVenomShotAtMs || 0)) {
+    return false;
+  }
+  const venom = getVenomConfig(racer);
+  return Boolean(findVenomTarget(race, racer, venom.range));
+}
+
+function findVenomTarget(race, racer, range) {
+  let best = null;
+  const lookCos = Math.cos(0.56);
+  const hx = Math.cos(racer.heading);
+  const hy = Math.sin(racer.heading);
+
+  for (const target of race.racers) {
+    if (target.id === racer.id || target.finished) {
+      continue;
+    }
+    const dx = target.x - racer.x;
+    const dy = target.y - racer.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > range || dist < 4) {
+      continue;
+    }
+    const nx = dx / dist;
+    const ny = dy / dist;
+    const facingDot = hx * nx + hy * ny;
+    if (facingDot < lookCos) {
+      continue;
+    }
+    const score = dist - facingDot * 16;
+    if (!best || score < best.score) {
+      best = { target, score };
+    }
+  }
+  return best ? best.target : null;
+}
+
+function maybeShootVenom(race, racer, control, nowMs) {
+  if (!control?.spit || racer.finished || race.phase !== "running") {
+    return;
+  }
+  if (nowMs < (racer.nextVenomShotAtMs || 0)) {
+    return;
+  }
+  const venom = getVenomConfig(racer);
+  racer.nextVenomShotAtMs = nowMs + venom.cooldownMs;
+
+  const shot = {
+    id: `venom_${racer.id}_${Math.floor(nowMs)}_${Math.floor(Math.random() * 9999)}`,
+    ownerId: racer.id,
+    x: racer.x + Math.cos(racer.heading) * 13,
+    y: racer.y + Math.sin(racer.heading) * 13,
+    vx: Math.cos(racer.heading),
+    vy: Math.sin(racer.heading),
+    speed: venom.speed,
+    radius: VENOM_PROJECTILE_RADIUS,
+    bornAtMs: nowMs,
+    maxLifeMs: VENOM_PROJECTILE_MAX_LIFE_MS,
+    maxTravelDist: venom.range,
+    traveledDist: 0,
+    durationMs: venom.durationMs,
+    slowMul: venom.slowMul,
+    color: hexToInt(racer.color),
+  };
+
+  race.venomShots.push(shot);
+}
+
+function updateVenomShots(race, nowMs, dt) {
+  if (!race.venomShots || !race.venomShots.length) {
+    return;
+  }
+
+  for (let i = race.venomShots.length - 1; i >= 0; i -= 1) {
+    const shot = race.venomShots[i];
+    if (nowMs - shot.bornAtMs > shot.maxLifeMs || shot.traveledDist >= shot.maxTravelDist) {
+      race.venomShots.splice(i, 1);
+      continue;
+    }
+
+    const step = shot.speed * dt;
+    shot.x += shot.vx * step;
+    shot.y += shot.vy * step;
+    shot.traveledDist += Math.abs(step);
+
+    const projection = projectOnTrack(race.track, shot.x, shot.y);
+    if (!projection || projection.distance > race.track.outsideWidth * 1.15) {
+      race.venomShots.splice(i, 1);
+      continue;
+    }
+
+    let hitTarget = null;
+    for (const target of race.racers) {
+      if (target.id === shot.ownerId || target.finished) {
+        continue;
+      }
+      if (sqrDistance(shot.x, shot.y, target.x, target.y) <= (shot.radius + VENOM_PROJECTILE_HIT_RADIUS) ** 2) {
+        hitTarget = target;
+        break;
+      }
+    }
+
+    if (!hitTarget) {
+      continue;
+    }
+
+    applyVenomHit(hitTarget, shot, nowMs);
+    race.venomShots.splice(i, 1);
+  }
+}
+
+function applyVenomHit(target, shot, nowMs) {
+  if (target.shieldCharges > 0) {
+    target.shieldCharges -= 1;
+    removeEffect(target, "SHIELD");
+    return;
+  }
+  addEffect(target, "VENOM_SLOW", shot.durationMs, nowMs, { speedMul: shot.slowMul });
+}
+
 function applyBodyCrossingRules(race, racer, nowMs) {
   if (racer.finished) {
+    return;
+  }
+  if (nowMs < (racer.unstuckUntilMs || 0)) {
     return;
   }
   if (nowMs < (race.bodyCrossingGraceUntilMs || 0)) {
@@ -1234,7 +1527,7 @@ function applyBodyCrossingRules(race, racer, nowMs) {
 
   const headRadius = 10;
   for (const other of race.racers) {
-    if (other.id === racer.id || other.finished || !other.bodySegments?.length) {
+    if (other.id === racer.id || other.finished || nowMs < (other.unstuckUntilMs || 0) || !other.bodySegments?.length) {
       continue;
     }
 
@@ -1264,11 +1557,19 @@ function applyBodyCrossingRules(race, racer, nowMs) {
         const dist = Math.sqrt(Math.max(0.0001, distSq));
         const nx = dx / dist;
         const ny = dy / dist;
-        const push = limit + SPEEDSTER_BODY_BLOCK_PUSH;
+        const push = limit + Math.max(2, SPEEDSTER_BODY_BLOCK_PUSH * 0.5);
         racer.x = segment.x + nx * push;
         racer.y = segment.y + ny * push;
+        const tangentSign = Math.sign(shortestAngle(racer.heading, segment.heading || racer.heading)) || 1;
+        racer.heading = wrapAngle(racer.heading + SPEEDSTER_BLOCK_EXTRA_TURN * tangentSign);
+        const projection = racer.lastProjection || projectOnTrack(race.track, racer.x, racer.y);
+        const ahead = sampleTrack(race.track, mod1(projection.tNorm + 0.011));
+        const forwardHeading = Math.atan2(ahead.y - racer.y, ahead.x - racer.x);
+        racer.heading = wrapAngle(racer.heading + shortestAngle(racer.heading, forwardHeading) * 0.55);
+        racer.x += Math.cos(racer.heading) * (SPEEDSTER_BLOCK_NUDGE + 1.5);
+        racer.y += Math.sin(racer.heading) * (SPEEDSTER_BLOCK_NUDGE + 1.5);
         if (nowMs >= (racer.nextBodyCrossEffectAtMs || 0)) {
-          racer.speed *= 0.9;
+          racer.speed *= 0.96;
           racer.nextBodyCrossEffectAtMs = nowMs + BODY_CROSSING_EFFECT_COOLDOWN_MS;
         }
         ensureAlwaysMoveSpeed(racer);
@@ -1290,6 +1591,73 @@ function applyBodyCrossingRules(race, racer, nowMs) {
   }
 }
 
+function preventRacerStall(race, racer, nowMs) {
+  if (racer.finished || race.phase !== "running") {
+    return;
+  }
+  if (racer.isPlayer && !shouldNeverStop(racer)) {
+    return;
+  }
+
+  const projection = racer.lastProjection || projectOnTrack(race.track, racer.x, racer.y);
+  racer.lastProjection = projection;
+  ensureAlwaysMoveSpeed(racer);
+
+  if (!racer.stallWatch) {
+    racer.stallWatch = {
+      x: racer.x,
+      y: racer.y,
+      progressT: projection.tNorm,
+      lastMoveAtMs: nowMs,
+      lastUnstuckAtMs: 0,
+    };
+    return;
+  }
+
+  const watch = racer.stallWatch;
+  const movedSq = sqrDistance(racer.x, racer.y, watch.x, watch.y);
+  const progressDelta = signedTrackDelta(watch.progressT, projection.tNorm);
+
+  if (movedSq >= STALL_MOVEMENT_EPSILON_SQ || progressDelta >= STALL_PROGRESS_EPSILON) {
+    watch.x = racer.x;
+    watch.y = racer.y;
+    watch.progressT = projection.tNorm;
+    watch.lastMoveAtMs = nowMs;
+    return;
+  }
+
+  if (nowMs - watch.lastMoveAtMs < STALL_CHECK_WINDOW_MS) {
+    return;
+  }
+  if (nowMs - watch.lastUnstuckAtMs < STALL_UNSTUCK_COOLDOWN_MS) {
+    return;
+  }
+
+  const ahead = sampleTrack(race.track, mod1(projection.tNorm + STALL_UNSTUCK_LOOKAHEAD));
+  const normal = { x: -ahead.tangent.y, y: ahead.tangent.x };
+  const laneSign = Number.parseInt(racer.id.replace(/\D+/g, ""), 10) % 2 === 0 ? 1 : -1;
+  const lateral = Math.min(race.track.roadWidth * 0.16, 9) * laneSign;
+  racer.x = ahead.x + normal.x * lateral;
+  racer.y = ahead.y + normal.y * lateral;
+  racer.heading = Math.atan2(ahead.tangent.y, ahead.tangent.x);
+  racer.x += Math.cos(racer.heading) * (STALL_UNSTUCK_NUDGE * 0.45);
+  racer.y += Math.sin(racer.heading) * (STALL_UNSTUCK_NUDGE * 0.45);
+
+  const forcedSpeed = shouldNeverStop(racer)
+    ? Math.max(ALWAYS_MOVE_MIN_SPEED * 1.08, racer.stats.maxSpeed * 0.22)
+    : Math.max(16, racer.stats.maxSpeed * 0.14);
+  racer.speed = Math.max(racer.speed, forcedSpeed);
+  racer.nextBodyCrossEffectAtMs = nowMs + STALL_UNSTUCK_GHOST_MS;
+  racer.impactUntilMs = nowMs + STALL_UNSTUCK_GHOST_MS;
+  racer.unstuckUntilMs = nowMs + STALL_UNSTUCK_GHOST_MS;
+
+  watch.x = racer.x;
+  watch.y = racer.y;
+  watch.progressT = ahead.fraction;
+  watch.lastMoveAtMs = nowMs;
+  watch.lastUnstuckAtMs = nowMs;
+}
+
 function readPlayerControl() {
   const left = state.keyMap.has("ArrowLeft") || state.keyMap.has("KeyA");
   const right = state.keyMap.has("ArrowRight") || state.keyMap.has("KeyD");
@@ -1299,6 +1667,7 @@ function readPlayerControl() {
     turn: (left ? -1 : 0) + (right ? 1 : 0),
     throttle: up ? 1 : 0,
     brake: down ? 1 : 0,
+    spit: state.keyMap.has("Space"),
   };
 }
 
@@ -1312,6 +1681,9 @@ function resolveRacerCollisions(race, nowMs) {
     for (let j = i + 1; j < race.racers.length; j += 1) {
       const b = race.racers[j];
       if (b.finished) {
+        continue;
+      }
+      if (nowMs < (a.unstuckUntilMs || 0) || nowMs < (b.unstuckUntilMs || 0)) {
         continue;
       }
       const dx = b.x - a.x;
@@ -1419,7 +1791,7 @@ function updateHud(race, nowMs) {
   } else if (race.phase === "finished") {
     timerMs = focus.finishTimeMs;
   }
-  ui.timer.textContent = Number.isFinite(timerMs) ? formatMs(timerMs) : "DNF";
+  ui.timer.textContent = Number.isFinite(timerMs) ? formatMs(timerMs) : DNF_LABEL;
 
   const kmh = Math.round(focus.speed * 1.92);
   ui.speed.textContent = `${kmh} km/h`;
@@ -1435,8 +1807,8 @@ function updateHud(race, nowMs) {
     const tail = racer.finished
       ? Number.isFinite(racer.finishTimeMs)
         ? formatMs(racer.finishTimeMs)
-        : racer.eliminationReason || "DNF"
-      : "running";
+        : racer.eliminationReason || DNF_LABEL
+      : "в гонке";
     li.textContent = `${racer.name} - ${tail}`;
     ui.standings.appendChild(li);
   });
@@ -1462,6 +1834,9 @@ function readActiveEffectLabel(racer) {
   if (top.type === "OIL") {
     return "Масло";
   }
+  if (top.type === "VENOM_SLOW") {
+    return "Яд";
+  }
   if (top.type === "SHIELD") {
     return "Щит";
   }
@@ -1475,16 +1850,17 @@ function renderRace(scene, race, nowMs) {
   drawCheckpoints(g, race.track);
   drawBodyItems(g, race.bodyItems);
   drawPickups(g, race.pickups);
+  drawVenomShots(g, race.venomShots || []);
   drawRacers(scene, g, race.racers);
   syncRacerRenderSprites(scene, race.racers, true);
   syncRacerLabels(scene, race.racers, true);
 
-  const phaseText = race.phase === "countdown" ? "Countdown" : race.phase === "running" ? "Running" : "Finished";
+  const phaseText = race.phase === "countdown" ? "Отсчет" : race.phase === "running" ? "Гонка" : "Финиш";
   scene.infoText.setVisible(true);
   scene.infoText.setText([
-    `Track: ${race.trackDef.name}`,
-    `Phase: ${phaseText}`,
-    `Time: ${formatMs(Math.max(0, nowMs - race.raceStartMs))}`,
+    `Трасса: ${race.trackDef.name}`,
+    `Фаза: ${phaseText}`,
+    `Время: ${formatMs(Math.max(0, nowMs - race.raceStartMs))}`,
   ]);
 }
 
@@ -1619,6 +1995,16 @@ function drawPickups(g, pickups) {
       ],
       true
     );
+  }
+}
+
+function drawVenomShots(g, venomShots) {
+  for (const shot of venomShots) {
+    const base = shot.color || 0x8df36a;
+    g.fillStyle(base, 0.88);
+    g.fillCircle(shot.x, shot.y, shot.radius);
+    g.lineStyle(1, 0xeaffdf, 0.78);
+    g.strokeCircle(shot.x, shot.y, shot.radius + 1.8);
   }
 }
 
@@ -1915,7 +2301,7 @@ function loadBestTime(trackId) {
 
 function formatMs(ms) {
   if (!Number.isFinite(ms)) {
-    return "DNF";
+    return DNF_LABEL;
   }
   const clean = Math.max(0, Math.floor(ms));
   const minutes = Math.floor(clean / 60000);
@@ -2009,6 +2395,16 @@ function mod1(value) {
 
 function forwardTrackDelta(fromNorm, toNorm) {
   return toNorm >= fromNorm ? toNorm - fromNorm : 1 - fromNorm + toNorm;
+}
+
+function signedTrackDelta(fromNorm, toNorm) {
+  let delta = toNorm - fromNorm;
+  if (delta > 0.5) {
+    delta -= 1;
+  } else if (delta < -0.5) {
+    delta += 1;
+  }
+  return delta;
 }
 
 function hexToInt(hex) {
