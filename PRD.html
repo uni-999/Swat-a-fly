@@ -1,0 +1,409 @@
+<!DOCTYPE html []>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="author" content="MarkdownViewer++" />
+    <title>PRD.md</title>
+    <style type="text/css">
+            
+/* Avoid page breaks inside the most common attributes, especially for exports (i.e. PDF) */
+td, h1, h2, h3, h4, h5, p, ul, ol, li {
+    page-break-inside: avoid; 
+}
+
+        </style>
+  </head>
+  <body>
+    <p>Ниже — 3 документа в одном сообщении: <strong>PRD для продакта</strong>, <strong>Tech Design Doc для тимлида</strong>, <strong>ТЗ+план работ для разработчиков</strong> (с Definition of Done/Ready и задачами, которые можно прямо переносить в Jira/YouTrack). MoSCoW использую как метод приоритизации требований (Must/Should/Could/Won’t).<a id="fnref:15" href="#fn:1" class="footnote-ref"><sup>1</sup></a></p>
+    <h2 id="prd">1) PRD (для продакта)</h2>
+    <h3 id="section">1.1. Визия и цель</h3>
+    <p>Мы делаем браузерную аркадную гонку, где “машины” заменены на змей, а цель — быстрее всех пройти трассу и попасть в лидерборд. Критерии успеха в оценке проекта: плавность управления, стабильный FPS (≥60), отсутствие критических багов, чистая архитектура и качественная презентация.<a id="fnref:6" href="#fn:2" class="footnote-ref"><sup>2</sup></a></p>
+    <h3 id="section-1">1.2. Платформа и техстек (продуктовые решения)</h3>
+    <ul>
+      <li>Клиент: Phaser 3 (HTML5 2D framework) для быстрого прототипирования, спрайтов, тайлмапов, UI. <a href="https://phaser.io%5B%5E4%5D">https://phaser.io[^4]</a></li>
+      <li>Онлайн матчи (до 4): Colyseus (комнаты, синхронизация состояния, серверная логика матча). <a href="https://docs.colyseus.io%5B%5E5%5D">https://docs.colyseus.io[^5]</a></li>
+      <li>Лидерборды: Nakama (leaderboards), делаем authoritative, чтобы клиент не мог отправлять результаты напрямую. <a href="https://heroiclabs.com/docs/nakama/concepts/leaderboards/%5B%5E6%5D">https://heroiclabs.com/docs/nakama/concepts/leaderboards/[^6]</a></li>
+    </ul>
+    <h3 id="section-2">1.3. Режимы игры</h3>
+    <ul>
+      <li>Offline: 1 игрок + 3 NPC на трассе, фиксируем время, пишем в лидерборд (если есть сеть) или локально с последующей синхронизацией.</li>
+      <li>Online: 1–4 игрока в комнате, сервер авторитарно считает гонку, результаты пишутся в серверный лидерборд.</li>
+    </ul>
+    <h3 id="moscow">1.4. Основные фичи (MoSCoW)</h3>
+    <p>MoSCoW — метод приоритизации требований по Must/Should/Could/Won’t.<a id="fnref:21" href="#fn:3" class="footnote-ref"><sup>3</sup></a></p>
+    <p>Must (MVP обязателен):</p>
+    <ul>
+      <li>3 уникальные трассы, старт/финиш, логика выезда за трассу.<a id="fnref:7" href="#fn:2" class="footnote-ref"><sup>2</sup></a></li>
+      <li>Таймер прохождения, таблица змей с временем, интуитивный интерфейс, спидометр.<a id="fnref:8" href="#fn:2" class="footnote-ref"><sup>2</sup></a></li>
+      <li>4 вида змей (разные характеристики) + экран выбора.</li>
+      <li>4 пикапа (2 бафа + 2 минуса/бомба).</li>
+      <li>Offline 1+3 NPC.</li>
+      <li>Online до 4 игроков + серверный лидерборд.</li>
+    </ul>
+    <p>Should (после MVP, но желательно до защиты):</p>
+    <ul>
+      <li>“Линька” (сброс длины ради ускорения) как уникальная механика.<a id="fnref:9" href="#fn:2" class="footnote-ref"><sup>2</sup></a></li>
+      <li>“Терморецепторы” (тепловая карта/идеальная линия) как инновация.<a id="fnref:10" href="#fn:2" class="footnote-ref"><sup>2</sup></a></li>
+      <li>Качественные эффекты/звук на ключевые события.<a id="fnref:11" href="#fn:2" class="footnote-ref"><sup>2</sup></a></li>
+    </ul>
+    <p>Could (если успеваете):</p>
+    <ul>
+      <li>Подбор “набора” косметики (шапки/паттерны), дополнительные режимы (Time Trial).</li>
+      <li>Реплеи “призрака” лучшего заезда.</li>
+    </ul>
+    <p>Won’t (не делаем в этой итерации):</p>
+    <ul>
+      <li>Сложная физика хвоста по всей длине, полноценный pathfinding по navmesh, кросс‑платформенные аккаунты с соц‑логинами.</li>
+    </ul>
+    <h3 id="ux">1.5. UX-скелет (экраны)</h3>
+    <ul>
+      <li>Main Menu: Play Offline, Play Online, Leaderboards, Settings.</li>
+      <li>Snake Select: 4 карточки змей (статы + “фишка”).</li>
+      <li>Track Select: 3 трассы (превью + лучший результат).</li>
+      <li>Race HUD: таймер, спидометр, позиция/круг (если нужен), мини‑лидерборд, активный эффект (иконка+таймер).</li>
+      <li>Results: времена всех участников, кнопки “Retry/Next Track/Back”.</li>
+    </ul>
+    <h3 id="section-3">1.6. Метрики качества (что меряем)</h3>
+    <ul>
+      <li>FPS: 60+ на “тестовой машине” (вы определяете конфиг), без фризов &gt;50 мс.</li>
+      <li>Input latency: управление не должно “вязнуть” в offline; в online — минимальная заметная задержка (предикция+коррекция).</li>
+      <li>Crash-free: 10 минут непрерывной гонки без падений.</li>
+      <li>Честность результатов: authoritative leaderboard, клиент не может подделать время.<a id="fnref:17" href="#fn:4" class="footnote-ref"><sup>4</sup></a></li>
+    </ul>
+    <hr />
+    <h2 id="tech-design-doc">2) Tech Design Doc (для тимлида)</h2>
+    <h3 id="code-review">2.1. Принципы архитектуры (под code review)</h3>
+    <ul>
+      <li>Разделение: <code>Input → Simulation → Networking → Rendering → UI</code>.</li>
+      <li>Симуляция детерминированная по фиксированному тику.</li>
+      <li>В онлайне сервер авторитарен: клиент отправляет только input, сервер обновляет state и синхронизирует. Colyseus показывает паттерн “сервер мутирует state, клиент слушает изменения”. <a href="https://docs.colyseus.io/state/%5B%5E7%5D">https://docs.colyseus.io/state/[^7]</a></li>
+    </ul>
+    <h3 id="section-4">2.2. Компоненты системы (модули)</h3>
+    <p>Client <code>/client</code> (TS):</p>
+    <ul>
+      <li>
+        <code>input/</code>: Keyboard/Gamepad, нормализация в InputCommand.</li>
+      <li>
+        <code>sim/</code>: оффлайн симуляция (тот же код, что на сервере, если возможно).</li>
+      <li>
+        <code>net/</code>: Colyseus client, буфер команд, интерполяция/коррекция.</li>
+      <li>
+        <code>render/</code>: Phaser сцены, камеры, слой трассы, слой змей, VFX.</li>
+      <li>
+        <code>ui/</code>: HUD, меню, лидерборды.</li>
+      <li>
+        <code>assets/</code>: atlas, tilemaps, audio.</li>
+    </ul>
+    <p>Match Server <code>/match-server</code>:</p>
+    <ul>
+      <li>
+        <code>rooms/RaceRoom</code>: lifecycle комнаты, matchmaking.</li>
+      <li>
+        <code>state/RaceStateSchema</code>: snakes/pickups/racePhase/timers.</li>
+      <li>
+        <code>sim/</code>: authoritative симуляция, обработка коллизий и эффектов.</li>
+      <li>
+        <code>anti-cheat/</code>: серверная валидация input (скорость поворота/частота ability).</li>
+      <li>
+        <code>results/</code>: фиксация времени и отправка в Nakama.</li>
+    </ul>
+    <p>Backend <code>/backend</code>:</p>
+    <ul>
+      <li>Nakama (docker), runtime hooks/RPC для сабмита результатов.</li>
+      <li>Конфиг leaderboards по трассам.</li>
+    </ul>
+    <p>Shared <code>/shared</code>:</p>
+    <ul>
+      <li>
+        <code>types/</code>: SnakeStats, EffectType, TrackData, InputCommand, Snapshot.</li>
+      <li>
+        <code>config/</code>: snakes.json, perks.json, tracks manifest.</li>
+    </ul>
+    <h3 id="section-5">2.3. Модель данных (ключевые структуры)</h3>
+    <p>Snake:</p>
+    <ul>
+      <li>
+        <code>id</code>, <code>userId|npcId</code>, <code>snakeTypeId</code>, <code>pos</code>, <code>vel</code>, <code>heading</code>, <code>speed</code>.</li>
+      <li>
+        <code>effects[]: ActiveEffect { type, endsAtTick, magnitude, charges? }</code>
+      </li>
+      <li>
+        <code>race: { lap, checkpointIndex, finished, finishTimeMs }</code>
+      </li>
+    </ul>
+    <p>Pickups:</p>
+    <ul>
+      <li>
+        <code>id</code>, <code>type</code>, <code>pos</code>, <code>active</code>, <code>respawnAtTick</code>.</li>
+    </ul>
+    <p>Track:</p>
+    <ul>
+      <li>
+        <code>tilemapKey</code>, <code>layers: road/offroad/walls</code>, <code>objects: start/finish/checkpoints/spawners</code>.</li>
+      <li>
+        <code>surfaceAt(x,y)</code> возвращает road/offroad/outside.</li>
+    </ul>
+    <h3 id="section-6">2.4. Физика “ползучести” (простая и стабильная)</h3>
+    <ul>
+      <li>Движение: speed интегрируется с accel/drag, поворот ограничен <code>turnRate</code>.</li>
+      <li>Offroad: множитель к maxSpeed и accel, плюс VFX “пыль/грязь”.</li>
+      <li>Столкновение со стеной: отражение/откат + штраф скорости, щит может поглотить 1 удар.</li>
+    </ul>
+    <h3 id="section-7">2.5. 4 типа змей (баланс как данные)</h3>
+    <p>
+      <code>snakes.json</code>:</p>
+    <ul>
+      <li>
+        <code>speedster</code>: maxSpeed высокий, turnRate ниже.</li>
+      <li>
+        <code>handler</code>: turnRate высокий, maxSpeed ниже.</li>
+      <li>
+        <code>bully</code>: mass высокий, хуже поворот/разгон.</li>
+      <li>
+        <code>trickster</code>: минимальный offroadPenalty.</li>
+    </ul>
+    <p>Требование: никакой “if snake==X then …” в логике; только чтение статов из конфига.</p>
+    <h3 id="section-8">2.6. 4 пикапа (система эффектов)</h3>
+    <p>
+      <code>perks.json</code>:</p>
+    <ul>
+      <li>BOOST: +скорость кратковременно.</li>
+      <li>SHIELD: 1 заряд, игнорирует удар/бомбу.</li>
+      <li>OIL: снижает управляемость/увеличивает скольжение (дебаф).</li>
+      <li>BOMB: AoE замедление/отброс.</li>
+    </ul>
+    <p>Онлайн: подбор/взрыв/эффект решает сервер.</p>
+    <h3 id="colyseus-state-sync">2.7. Онлайн (Colyseus): state sync и тики</h3>
+    <p>Colyseus state model: клиент подписывается на изменения состояния комнаты и реагирует на патчи. <a href="https://docs.colyseus.io/state/%5B%5E7%5D">https://docs.colyseus.io/state/[^7]</a>
+Рекомендуемый подход:</p>
+    <ul>
+      <li>Сервер тик 20–30 Hz (экономия), клиент рендер 60 Hz, интерполяция других змей.</li>
+      <li>Клиент предсказывает свою змею (опционально), но сервер authoritative.</li>
+    </ul>
+    <h3 id="nakama-authoritative">2.8. Лидерборд (Nakama): authoritative</h3>
+    <p>Nakama: authoritative leaderboard означает, что <strong>клиенты не могут сабмитить</strong>; “all submissions must be made via the server runtime”, флаг authoritative задаётся при создании и потом не меняется. <a href="https://heroiclabs.com/docs/nakama/concepts/leaderboards/%5B%5E6%5D">https://heroiclabs.com/docs/nakama/concepts/leaderboards/[^6]</a>
+Политика:</p>
+    <ul>
+      <li>В оффлайне клиент отправляет “replay hash + время” на сервер, сервер проверяет минимально (или принимает с пометкой “unverified” — если надо).</li>
+      <li>В онлайне match‑server сабмитит финальное время напрямую через runtime.</li>
+    </ul>
+    <h3 id="fps">2.9. Производительность (60 FPS) и стабильность</h3>
+    <ul>
+      <li>Object pooling для хвоста/частиц/пикапов.</li>
+      <li>Atlas для спрайтов.</li>
+      <li>Ограничить количество сегментов хвоста в рендере (LOD: далеко — меньше сегментов).</li>
+      <li>Перф‑HUD (dev): FPS, frame time, количество активных объектов.</li>
+    </ul>
+    <hr />
+    <h2 id="dordod">3) ТЗ + план выполнения для разработчиков (с DoR/DoD и задачами)</h2>
+    <h3 id="definition-of-ready-dor">3.1. Definition of Ready (DoR)</h3>
+    <p>Задача “готова к взятию”, если:</p>
+    <ul>
+      <li>Есть макет/референс поведения.</li>
+      <li>Есть точные входные/выходные данные (тип/формат).</li>
+      <li>Известны критерии приёмки (tests/скрин/видео).</li>
+      <li>Нет блокеров по ассетам (есть заглушки).</li>
+    </ul>
+    <h3 id="definition-of-done-dod">3.2. Definition of Done (DoD)</h3>
+    <p>Definition of Done — это список проверяемых критериев, при которых работа считается завершённой и готовой к релизу/интеграции. <a href="https://lucid.co/blog/definition-of-done-agile%5B%5E2%5D">https://lucid.co/blog/definition-of-done-agile[^2]</a>
+Для проекта DoD на фичу:</p>
+    <ul>
+      <li>Код в нужном модуле, без нарушения слоёв (sim vs render vs ui).</li>
+      <li>Тестовый прогон: 10 минут гонки без краша.</li>
+      <li>Нет регрессий FPS (dev сцена).</li>
+      <li>Логи/метрики (если нужно).</li>
+      <li>Короткое видео/гиф “как работает”.</li>
+    </ul>
+    <h3 id="section-9">3.3. ТЗ по подсистемам (конкретные требования)</h3>
+    <ol type="A">
+      <li>Трассы (3 шт.)</li>
+    </ol>
+    <ul>
+      <li>Формат: Tiled JSON, обязательные слои <code>Road/Offroad/Walls/Objects</code>.</li>
+      <li>Objects: <code>start</code>, <code>finish</code>, <code>checkpoint_1..n</code>, <code>pickup_spawn_1..m</code>.</li>
+      <li>Offroad: speed cap + accel penalty, VFX.</li>
+      <li>Outside: reset на последний checkpoint + time penalty.</li>
+    </ul>
+    <ol type="A" start="2">
+      <li>Гонка</li>
+    </ol>
+    <ul>
+      <li>Фазы: Lobby → Countdown(3…2…1) → Running → Finished.</li>
+      <li>Таймер: ms, отображение до тысячных.</li>
+      <li>Финиш: фиксируем время каждого участника; сортировка результатов.</li>
+    </ul>
+    <ol type="A" start="3">
+      <li>Змеи (4 типа)</li>
+    </ol>
+    <ul>
+      <li>Экран выбора.</li>
+      <li>Статы из <code>snakes.json</code>.</li>
+      <li>Визуально: отличающиеся цвета/головы (заглушки на MVP).</li>
+      <li>“Линька” (если включили): ability, cooldown.</li>
+    </ul>
+    <ol type="A" start="4">
+      <li>Пикапы (4 типа)</li>
+    </ol>
+    <ul>
+      <li>Спавн по точкам, respawn.</li>
+      <li>Сервер authoritative (в online).</li>
+      <li>UI: иконка+таймер.</li>
+    </ul>
+    <ol type="A" start="5">
+      <li>NPC (3)</li>
+    </ol>
+    <ul>
+      <li>Waypoint follow.</li>
+      <li>3 профиля поведения (аккуратный/норм/агрессивный).</li>
+    </ul>
+    <ol type="A" start="6">
+      <li>Online (до 4)</li>
+    </ol>
+    <ul>
+      <li>Создание/вход в комнату.</li>
+      <li>Синхронизация позиций/эффектов/пикапов.</li>
+      <li>Обработка отключений (leave → закончить гонку или заменить на NPC).</li>
+    </ul>
+    <ol type="A" start="7">
+      <li>Лидерборды (Nakama)</li>
+    </ol>
+    <ul>
+      <li>По каждой трассе: <code>track_{id}_time</code>.</li>
+      <li>Сортировка ASC, operator best.</li>
+      <li>Authoritative: клиент не сабмитит напрямую.<a id="fnref:18" href="#fn:4" class="footnote-ref"><sup>4</sup></a></li>
+    </ul>
+    <h3 id="section-10">3.4. План работ (таск-лист по эпикам)</h3>
+    <p>Эпик E0: Инфраструктура</p>
+    <ul>
+      <li>E0.1 Monorepo, сборка client, линтер/форматтер.</li>
+      <li>E0.2 Colyseus server шаблон комнаты на 4.</li>
+      <li>E0.3 Nakama docker + создание leaderboards.</li>
+    </ul>
+    <p>Эпик E1: Оффлайн вертикальный срез (MVP core)</p>
+    <ul>
+      <li>E1.1 Симуляция змеи (плавное управление, инерция).</li>
+      <li>E1.2 Загрузка трассы #1 из Tiled, start/finish, checkpoints.</li>
+      <li>E1.3 Offroad/Outside логика.</li>
+      <li>E1.4 HUD: timer, speedometer, standings.</li>
+      <li>E1.5 NPC 3 шт.</li>
+    </ul>
+    <p>Эпик E2: Контент и разнообразие</p>
+    <ul>
+      <li>E2.1 4 типа змей (конфиг + UI выбора).</li>
+      <li>E2.2 4 пикапа (BOOST/SHIELD/OIL/BOMB).</li>
+      <li>E2.3 VFX/SFX hooks (события).</li>
+    </ul>
+    <p>Эпик E3: Онлайн</p>
+    <ul>
+      <li>E3.1 Server tick loop + authoritative state.</li>
+      <li>E3.2 Client net layer (join/leave, interpolation).</li>
+      <li>E3.3 Server финализация результата.</li>
+      <li>E3.4 Сабмит результата в Nakama authoritative leaderboard.<a id="fnref:19" href="#fn:4" class="footnote-ref"><sup>4</sup></a></li>
+    </ul>
+    <p>Эпик E4: 3 трассы + полировка + презентация</p>
+    <ul>
+      <li>E4.1 Трасса #2 и #3 (уникальные), баланс.</li>
+      <li>E4.2 Перф‑оптимизация до стабильных 60 FPS.<a id="fnref:12" href="#fn:2" class="footnote-ref"><sup>2</sup></a></li>
+      <li>E4.3 Демозапись геймплея + ответы комиссии.<a id="fnref:13" href="#fn:2" class="footnote-ref"><sup>2</sup></a></li>
+    </ul>
+    <h3 id="section-11">3.5. Критерии приёмки (готовые “чек-листы”)</h3>
+    <p>Для релиз-кандидата:</p>
+    <ul>
+      <li>3 трассы проходимы, start/finish корректны.</li>
+      <li>Offroad всегда замедляет, outside всегда ресетит.</li>
+      <li>В offline 1+3 NPC заезд без багов.</li>
+      <li>В online 2–4 игрока доезжают и видят одинаковые результаты.</li>
+      <li>Лидерборд обновляется только сервером (authoritative).<a id="fnref:20" href="#fn:4" class="footnote-ref"><sup>4</sup></a></li>
+      <li>FPS стабильно ≥60 на тестовом ПК.<a id="fnref:14" href="#fn:2" class="footnote-ref"><sup>2</sup></a></li>
+    </ul>
+    <hr />
+    <p>
+      <span style="display:none">
+        <a id="fnref:2" href="#fn:5" class="footnote-ref">
+          <sup>5</sup>
+        </a>
+        <a id="fnref:1" href="#fn:6" class="footnote-ref">
+          <sup>6</sup>
+        </a>
+        <a id="fnref:3" href="#fn:7" class="footnote-ref">
+          <sup>7</sup>
+        </a>
+        <a id="fnref:4" href="#fn:8" class="footnote-ref">
+          <sup>8</sup>
+        </a>
+        <a id="fnref:5" href="#fn:9" class="footnote-ref">
+          <sup>9</sup>
+        </a>
+        <a id="fnref:16" href="#fn:10" class="footnote-ref">
+          <sup>10</sup>
+        </a>
+      </span>
+    </p>
+    <div align="center">⁂</div>
+    <div class="footnotes">
+      <hr />
+      <ol>
+        <li id="fn:6">
+          <p>
+            <a href="https://www.wrike.com/project-management-guide/faq/what-is-definition-of-done-agile/">https://www.wrike.com/project-management-guide/faq/what-is-definition-of-done-agile/</a>
+            <a href="#fnref:1" class="footnote-back-ref">↩</a>
+          </p>
+        </li>
+        <li id="fn:5">
+          <p>
+            <a href="https://activecollab.com/blog/project-management/moscow-method">https://activecollab.com/blog/project-management/moscow-method</a>
+            <a href="#fnref:2" class="footnote-back-ref">↩</a>
+          </p>
+        </li>
+        <li id="fn:7">
+          <p>
+            <a href="https://airfocus.com/glossary/what-is-moscow-prioritization/">https://airfocus.com/glossary/what-is-moscow-prioritization/</a>
+            <a href="#fnref:3" class="footnote-back-ref">↩</a>
+          </p>
+        </li>
+        <li id="fn:8">
+          <p>
+            <a href="https://heroiclabs.com/docs/nakama/concepts/leaderboards/best-practices/">https://heroiclabs.com/docs/nakama/concepts/leaderboards/best-practices/</a>
+            <a href="#fnref:4" class="footnote-back-ref">↩</a>
+          </p>
+        </li>
+        <li id="fn:9">
+          <p>
+            <a href="https://www.atlassian.com/agile/project-management/definition-of-done">https://www.atlassian.com/agile/project-management/definition-of-done</a>
+            <a href="#fnref:5" class="footnote-back-ref">↩</a>
+          </p>
+        </li>
+        <li id="fn:2">
+          <p>image.jpg<a href="#fnref:6" class="footnote-back-ref">↩</a><a href="#fnref:7" class="footnote-back-ref">↩</a><a href="#fnref:8" class="footnote-back-ref">↩</a><a href="#fnref:9" class="footnote-back-ref">↩</a><a href="#fnref:10" class="footnote-back-ref">↩</a><a href="#fnref:11" class="footnote-back-ref">↩</a><a href="#fnref:12" class="footnote-back-ref">↩</a><a href="#fnref:13" class="footnote-back-ref">↩</a><a href="#fnref:14" class="footnote-back-ref">↩</a></p>
+        </li>
+        <li id="fn:1">
+          <p>
+            <a href="https://lucid.co/blog/definition-of-done-agile">https://lucid.co/blog/definition-of-done-agile</a>
+            <a href="#fnref:15" class="footnote-back-ref">↩</a>
+          </p>
+        </li>
+        <li id="fn:10">
+          <p>
+            <a href="https://community.atlassian.com/forums/App-Central-articles/Understanding-the-MoSCoW-prioritization-How-to-implement-it-into/ba-p/2463999">https://community.atlassian.com/forums/App-Central-articles/Understanding-the-MoSCoW-prioritization-How-to-implement-it-into/ba-p/2463999</a>
+            <a href="#fnref:16" class="footnote-back-ref">↩</a>
+          </p>
+        </li>
+        <li id="fn:4">
+          <p>
+            <a href="https://heroiclabs.com/docs/nakama/concepts/leaderboards/">https://heroiclabs.com/docs/nakama/concepts/leaderboards/</a>
+            <a href="#fnref:17" class="footnote-back-ref">↩</a>
+            <a href="#fnref:18" class="footnote-back-ref">↩</a>
+            <a href="#fnref:19" class="footnote-back-ref">↩</a>
+            <a href="#fnref:20" class="footnote-back-ref">↩</a>
+          </p>
+        </li>
+        <li id="fn:3">
+          <p>
+            <a href="https://www.productplan.com/glossary/moscow-prioritization/">https://www.productplan.com/glossary/moscow-prioritization/</a>
+            <a href="#fnref:21" class="footnote-back-ref">↩</a>
+          </p>
+        </li>
+      </ol>
+    </div>
+  </body>
+</html>

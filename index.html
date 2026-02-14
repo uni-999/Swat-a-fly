@@ -1,14 +1,112 @@
-<!DOCTYPE html>
-<html lang="en">
+﻿<!DOCTYPE html>
+<html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>test 3</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake Drift Rush</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Exo+2:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Snake Game</h1>
-    <canvas id="gameCanvas" width="400" height="400"></canvas>
-    <script src="script.js"></script>
+  <div class="bg-noise"></div>
+  <main class="app">
+    <header class="app-header">
+      <h1>Snake Drift Rush</h1>
+      <p>Аркадная гонка змей: debug-режим с 4 NPC для быстрой отладки</p>
+    </header>
+
+    <section id="screen-main" class="screen active">
+      <div class="panel menu-panel">
+        <button id="btn-offline" class="btn primary">Play Offline</button>
+        <button id="btn-online" class="btn ghost">Play Online (soon)</button>
+        <button id="btn-leaderboards" class="btn ghost">Leaderboards (soon)</button>
+        <button id="btn-settings" class="btn ghost">Settings (soon)</button>
+      </div>
+    </section>
+
+    <section id="screen-snake" class="screen">
+      <div class="panel">
+        <h2>Выбор змеи</h2>
+        <div id="snake-cards" class="card-grid"></div>
+        <div class="actions">
+          <button id="snake-back" class="btn ghost">Назад</button>
+          <button id="snake-next" class="btn primary" disabled>Дальше</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-track" class="screen">
+      <div class="panel">
+        <h2>Выбор трассы</h2>
+        <div id="track-cards" class="card-grid"></div>
+        <div class="actions">
+          <button id="track-back" class="btn ghost">Назад</button>
+          <button id="track-start" class="btn primary" disabled>Старт</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-race" class="screen">
+      <div class="race-layout">
+        <div id="race-stage" aria-label="Race field"></div>
+        <aside class="hud-panel">
+          <div class="hud-box">
+            <span>Timer</span>
+            <strong id="hud-timer">00:00.000</strong>
+          </div>
+          <div class="hud-box">
+            <span>Speed</span>
+            <strong id="hud-speed">0 km/h</strong>
+          </div>
+          <div class="hud-box">
+            <span>Position</span>
+            <strong id="hud-position">P1/4</strong>
+          </div>
+          <div class="hud-box">
+            <span>Effect</span>
+            <strong id="hud-effect">none</strong>
+          </div>
+          <div class="hud-box standings">
+            <span>Standings</span>
+            <ol id="hud-standings"></ol>
+          </div>
+          <div class="controls">
+            <p>Управление: W/A/S/D или стрелки</p>
+            <p>R: рестарт трассы</p>
+          </div>
+        </aside>
+      </div>
+      <div id="race-overlay" class="race-overlay"></div>
+    </section>
+
+    <section id="screen-results" class="screen">
+      <div class="panel">
+        <h2>Результаты заезда</h2>
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Участник</th>
+              <th>Змея</th>
+              <th>Время</th>
+            </tr>
+          </thead>
+          <tbody id="results-body"></tbody>
+        </table>
+        <div class="actions">
+          <button id="results-retry" class="btn primary">Retry</button>
+          <button id="results-next" class="btn ghost">Next Track</button>
+          <button id="results-back" class="btn ghost">Back To Menu</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="toast" class="toast"></div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
