@@ -98,6 +98,7 @@
 - Поток результатов: `match-server -> nakama RPC submit_race_time -> leaderboard`.
 - Для офлайн `userId` match-server генерирует детерминированный `owner_id` (UUID), чтобы Nakama корректно записывал результаты.
 - `postgres` работает только во внутренней сети `docker-compose` (порт наружу не пробрасывается).
+- Данные Postgres пишутся в папку проекта `./_data/postgres` (bind mount), поэтому не теряются при перезапуске Docker/контейнеров.
 
 ## Запуск через Docker (рекомендуется)
 
@@ -106,6 +107,8 @@
 ```bash
 cp .env.example .env
 ```
+
+По умолчанию БД хранится в папке `./_data/postgres` внутри проекта.
 
 2. Поднять весь стек:
 
@@ -132,6 +135,9 @@ docker compose down
 ```bash
 docker compose down -v
 ```
+
+Для bind mount (`POSTGRES_DATA_DIR`) команда выше не удаляет файлы БД в папке хоста.
+Для bind mount `./_data/postgres` команда выше не удаляет файлы БД в папке проекта.
 
 ## Локальный запуск без Docker (опционально)
 
