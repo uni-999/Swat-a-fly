@@ -272,6 +272,12 @@ function showScreen(name) {
   state.currentScreen = name;
   if (name !== "race") {
     ui.overlay.classList.remove("visible");
+  } else if (state.phaserGame) {
+    setTimeout(() => {
+      if (state.phaserGame) {
+        state.phaserGame.scale.refresh();
+      }
+    }, 0);
   }
 }
 
@@ -854,145 +860,203 @@ function readActiveEffectLabel(racer) {
   return top.type;
 }
 
-function renderRace(race, nowMs) {
-  clearCanvas();
-  drawTrack(race.track);
-  drawCheckpoints(race.track);
-  drawPickups(race.pickups);
-  drawRacers(race.racers);
+function renderRace(scene, race, nowMs) {
+  const g = scene.graphics;
+  drawBackground(g);
+  drawTrack(g, race.track);
+  drawCheckpoints(g, race.track);
+  drawPickups(g, race.pickups);
+  drawRacers(g, race.racers);
+  syncRacerLabels(scene, race.racers, true);
 
-  canvasCtx.fillStyle = "rgba(255,255,255,0.76)";
-  canvasCtx.font = "600 13px 'Exo 2', sans-serif";
-  canvasCtx.fillText(`Track: ${race.trackDef.name}`, 12, 20);
   const phaseText = race.phase === "countdown" ? "Countdown" : race.phase === "running" ? "Running" : "Finished";
-  canvasCtx.fillText(`Phase: ${phaseText}`, 12, 38);
-  canvasCtx.fillText(`Time: ${formatMs(Math.max(0, nowMs - race.raceStartMs))}`, 12, 56);
+  scene.infoText.setVisible(true);
+  scene.infoText.setText([
+    `Track: ${race.trackDef.name}`,
+    `Phase: ${phaseText}`,
+    `Time: ${formatMs(Math.max(0, nowMs - race.raceStartMs))}`,
+  ]);
 }
 
-function clearCanvas() {
-  const grad = canvasCtx.createLinearGradient(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-  grad.addColorStop(0, "#0a1a33");
-  grad.addColorStop(1, "#101026");
-  canvasCtx.fillStyle = grad;
-  canvasCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+function renderIdle(scene) {
+  drawBackground(scene.graphics);
+  scene.infoText.setVisible(false);
+  syncRacerLabels(scene, [], false);
 }
 
-function drawTrack(track) {
-  canvasCtx.save();
-  canvasCtx.lineCap = "round";
-  canvasCtx.lineJoin = "round";
-
-  canvasCtx.beginPath();
-  pathPolyline(canvasCtx, track.points);
-  canvasCtx.strokeStyle = "rgba(145, 124, 88, 0.5)";
-  canvasCtx.lineWidth = track.outsideWidth * 2;
-  canvasCtx.stroke();
-
-  canvasCtx.beginPath();
-  pathPolyline(canvasCtx, track.points);
-  canvasCtx.strokeStyle = "rgba(73, 83, 105, 0.92)";
-  canvasCtx.lineWidth = track.roadWidth * 2;
-  canvasCtx.stroke();
-
-  canvasCtx.beginPath();
-  pathPolyline(canvasCtx, track.points);
-  canvasCtx.setLineDash([10, 12]);
-  canvasCtx.strokeStyle = "rgba(152, 230, 255, 0.72)";
-  canvasCtx.lineWidth = 2;
-  canvasCtx.stroke();
-  canvasCtx.setLineDash([]);
-
-  canvasCtx.restore();
+function drawBackground(g) {
+  g.clear();
+  g.fillGradientStyle(0x0a1a33, 0x0a1a33, 0x101026, 0x101026, 1);
+  g.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 }
 
-function drawCheckpoints(track) {
-  for (let i = 0; i < track.checkpoints.length; i += 1) {
-    const cp = track.checkpoints[i];
-    canvasCtx.beginPath();
-    canvasCtx.arc(cp.x, cp.y, i === 0 ? 8 : 6, 0, TAU);
-    canvasCtx.fillStyle = i === 0 ? "rgba(255, 101, 101, 0.9)" : "rgba(98, 219, 255, 0.85)";
-    canvasCtx.fill();
+function drawTrack(g, track) {
+  g.lineStyle(track.outsideWidth * 2, 0x917c58, 0.5);
+  strokeClosedPolyline(g, track.points);
+
+  g.lineStyle(track.roadWidth * 2, 0x495369, 0.92);
+  strokeClosedPolyline(g, track.points);
+
+  g.lineStyle(2, 0x98e6ff, 0.72);
+  drawDashedPolyline(g, track.points, 10, 12);
+}
+
+function strokeClosedPolyline(g, points) {
+  if (!points.length) {
+    return;
+  }
+  g.beginPath();
+  g.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i += 1) {
+    g.lineTo(points[i].x, points[i].y);
+  }
+  g.lineTo(points[0].x, points[0].y);
+  g.strokePath();
+}
+
+function drawDashedPolyline(g, points, dash, gap) {
+  if (points.length < 2) {
+    return;
+  }
+  for (let i = 0; i < points.length; i += 1) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.001) {
+      continue;
+    }
+    const nx = dx / len;
+    const ny = dy / len;
+    let pos = 0;
+    let paint = true;
+    while (pos < len) {
+      const segLen = Math.min(paint ? dash : gap, len - pos);
+      if (paint) {
+        const x1 = a.x + nx * pos;
+        const y1 = a.y + ny * pos;
+        const x2 = a.x + nx * (pos + segLen);
+        const y2 = a.y + ny * (pos + segLen);
+        g.lineBetween(x1, y1, x2, y2);
+      }
+      pos += segLen;
+      paint = !paint;
+    }
   }
 }
 
-function drawPickups(pickups) {
+function drawCheckpoints(g, track) {
+  for (let i = 0; i < track.checkpoints.length; i += 1) {
+    const cp = track.checkpoints[i];
+    g.fillStyle(i === 0 ? 0xff6565 : 0x62dbff, i === 0 ? 0.9 : 0.85);
+    g.fillCircle(cp.x, cp.y, i === 0 ? 8 : 6);
+  }
+}
+
+function drawPickups(g, pickups) {
   for (const pickup of pickups) {
     if (!pickup.active) {
       continue;
     }
-    const color = PICKUP_TYPES[pickup.type].color;
-    canvasCtx.save();
-    canvasCtx.translate(pickup.x, pickup.y);
-    canvasCtx.rotate(Math.PI / 4);
-    canvasCtx.fillStyle = color;
-    canvasCtx.fillRect(-7, -7, 14, 14);
-    canvasCtx.restore();
+    const color = hexToInt(PICKUP_TYPES[pickup.type].color);
+    const size = 7;
+    g.fillStyle(color, 1);
+    g.fillPoints(
+      [
+        { x: pickup.x, y: pickup.y - size },
+        { x: pickup.x + size, y: pickup.y },
+        { x: pickup.x, y: pickup.y + size },
+        { x: pickup.x - size, y: pickup.y },
+      ],
+      true
+    );
   }
 }
 
-function drawRacers(racers) {
+function drawRacers(g, racers) {
   racers.forEach((racer) => {
-    drawTrail(racer);
+    drawTrail(g, racer);
   });
   racers.forEach((racer) => {
-    drawRacerBody(racer);
+    drawRacerBody(g, racer);
   });
 }
 
-function drawTrail(racer) {
+function drawTrail(g, racer) {
   if (!racer.trail.length) {
     return;
   }
+  const color = hexToInt(racer.color);
   for (let i = 0; i < racer.trail.length; i += 1) {
     const point = racer.trail[i];
     const alpha = i / racer.trail.length;
     const radius = 3 + alpha * 4;
-    canvasCtx.beginPath();
-    canvasCtx.arc(point.x, point.y, radius, 0, TAU);
-    canvasCtx.fillStyle = hexToRgba(racer.color, 0.09 + alpha * 0.25);
-    canvasCtx.fill();
+    g.fillStyle(color, 0.09 + alpha * 0.25);
+    g.fillCircle(point.x, point.y, radius);
   }
 }
 
-function drawRacerBody(racer) {
-  canvasCtx.save();
-  canvasCtx.translate(racer.x, racer.y);
-  canvasCtx.rotate(racer.heading);
-  canvasCtx.beginPath();
-  canvasCtx.moveTo(15, 0);
-  canvasCtx.lineTo(-11, 8);
-  canvasCtx.lineTo(-6, 0);
-  canvasCtx.lineTo(-11, -8);
-  canvasCtx.closePath();
-  canvasCtx.fillStyle = racer.color;
-  canvasCtx.fill();
-  canvasCtx.strokeStyle = "rgba(8, 10, 14, 0.65)";
-  canvasCtx.lineWidth = 1.3;
-  canvasCtx.stroke();
+function drawRacerBody(g, racer) {
+  const p1 = rotatePoint(15, 0, racer.heading, racer.x, racer.y);
+  const p2 = rotatePoint(-11, 8, racer.heading, racer.x, racer.y);
+  const p3 = rotatePoint(-6, 0, racer.heading, racer.x, racer.y);
+  const p4 = rotatePoint(-11, -8, racer.heading, racer.x, racer.y);
+
+  g.fillStyle(hexToInt(racer.color), 1);
+  g.fillPoints([p1, p2, p3, p4], true);
+
+  g.lineStyle(1.3, 0x080a0e, 0.65);
+  g.beginPath();
+  g.moveTo(p1.x, p1.y);
+  g.lineTo(p2.x, p2.y);
+  g.lineTo(p3.x, p3.y);
+  g.lineTo(p4.x, p4.y);
+  g.closePath();
+  g.strokePath();
 
   if (racer.shieldCharges > 0) {
-    canvasCtx.beginPath();
-    canvasCtx.arc(0, 0, 16, 0, TAU);
-    canvasCtx.strokeStyle = "rgba(99, 207, 255, 0.86)";
-    canvasCtx.lineWidth = 2;
-    canvasCtx.stroke();
+    g.lineStyle(2, 0x63cfff, 0.86);
+    g.strokeCircle(racer.x, racer.y, 16);
   }
-  canvasCtx.restore();
-
-  canvasCtx.fillStyle = "rgba(255,255,255,0.78)";
-  canvasCtx.font = "700 12px 'Exo 2', sans-serif";
-  canvasCtx.fillText(racer.name, racer.x - 20, racer.y - 14);
 }
 
-function pathPolyline(ctx, points) {
-  if (!points.length) {
-    return;
+function rotatePoint(localX, localY, angle, baseX, baseY) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return {
+    x: baseX + localX * c - localY * s,
+    y: baseY + localX * s + localY * c,
+  };
+}
+
+function syncRacerLabels(scene, racers, visible) {
+  const live = new Set();
+  for (const racer of racers) {
+    let label = scene.labelMap.get(racer.id);
+    if (!label) {
+      label = scene.add
+        .text(0, 0, "", {
+          fontFamily: "\"Exo 2\", sans-serif",
+          fontSize: "12px",
+          color: "#e9f2ff",
+          stroke: "#0a1020",
+          strokeThickness: 2,
+        })
+        .setDepth(25);
+      scene.labelMap.set(racer.id, label);
+    }
+    label.setVisible(visible);
+    label.setText(racer.name);
+    label.setPosition(racer.x - 24, racer.y - 26);
+    live.add(racer.id);
   }
-  ctx.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i < points.length; i += 1) {
-    ctx.lineTo(points[i].x, points[i].y);
-  }
-  ctx.lineTo(points[0].x, points[0].y);
+
+  scene.labelMap.forEach((label, id) => {
+    if (!live.has(id) || !visible) {
+      label.setVisible(false);
+    }
+  });
 }
 
 function buildTrackRuntime(def) {
@@ -1146,12 +1210,8 @@ function mod1(value) {
   return ((value % 1) + 1) % 1;
 }
 
-function hexToRgba(hex, alpha) {
+function hexToInt(hex) {
   const c = hex.replace("#", "");
   const value = c.length === 3 ? c.split("").map((part) => `${part}${part}`).join("") : c;
-  const num = Number.parseInt(value, 16);
-  const r = (num >> 16) & 255;
-  const g = (num >> 8) & 255;
-  const b = num & 255;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  return Number.parseInt(value, 16);
 }
