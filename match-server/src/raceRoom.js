@@ -2,12 +2,41 @@ import { Room } from "@colyseus/core";
 
 const TRACK_LENGTH = 12000;
 const COUNTDOWN_MS = 3000;
+const STEER_RESPONSE_PER_SEC = 12.0;
+const BASE_TURN_RATE = 2.9;
+const TURN_RATE_SPEED_LOSS = 1.15;
+const GRID_OFFSETS = [-18, -6, 6, 18];
+const TRACK_SPAWN_POSES = {
+  canyon_loop: { x: 881.52, y: 298.41, heading: 1.6004 },
+  switchback_run: { x: 68.76, y: 307.23, heading: -1.4717 },
+  twin_fang: { x: 130.0, y: 300.0, heading: -1.3260 },
+};
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 function safeNumber(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeTrackId(trackId) {
+  return String(trackId || "canyon_loop")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_");
+}
+
+function getSpawnPose(trackId, slotIndex = 0) {
+  const key = normalizeTrackId(trackId);
+  const base = TRACK_SPAWN_POSES[key] || TRACK_SPAWN_POSES.canyon_loop;
+  const offset = GRID_OFFSETS[Math.abs(slotIndex) % GRID_OFFSETS.length];
+  const normalX = -Math.sin(base.heading);
+  const normalY = Math.cos(base.heading);
+  return {
+    x: base.x + normalX * offset,
+    y: base.y + normalY * offset,
+    heading: base.heading,
+  };
 }
 
 export class RaceRoom extends Room {
@@ -45,6 +74,7 @@ export class RaceRoom extends Room {
   onJoin(client, options) {
     const userId = options?.userId ? String(options.userId) : client.sessionId;
     const displayName = options?.name ? String(options.name) : `Player ${this.clients.length}`;
+    const spawnPose = getSpawnPose(this.trackId, this.players.size);
 
     this.players.set(client.sessionId, {
       sessionId: client.sessionId,
@@ -52,11 +82,12 @@ export class RaceRoom extends Room {
       displayName,
       connected: true,
       isBot: false,
-      ready: false,
+      ready: true,
       input: { turn: 0, throttle: 0, brake: 0 },
-      x: 0,
-      y: 0,
-      heading: 0,
+      x: spawnPose.x,
+      y: spawnPose.y,
+      heading: spawnPose.heading,
+      steer: 0,
       speed: 0,
       progress: 0,
       finished: false,
@@ -121,7 +152,7 @@ export class RaceRoom extends Room {
     }
 
     const participants = Array.from(this.players.values()).filter((p) => p.connected);
-    if (participants.length < 2) {
+    if (participants.length < 1) {
       return;
     }
 
@@ -171,12 +202,18 @@ export class RaceRoom extends Room {
       const accel = 280;
       const brakeForce = 380;
       const drag = 1.15;
+      const throttleInput = clamp(safeNumber(input?.throttle, 0), 0, 1);
+      const brakeInput = clamp(safeNumber(input?.brake, 0), 0, 1);
+      const targetTurn = clamp(safeNumber(input?.turn, 0), -1, 1);
 
-      player.speed += (input.throttle * accel - input.brake * brakeForce - drag * player.speed) * dt;
+      player.speed += (throttleInput * accel - brakeInput * brakeForce - drag * player.speed) * dt;
       player.speed = clamp(player.speed, 0, maxSpeed);
 
-      const turnRate = 2.9 - (player.speed / maxSpeed) * 1.2;
-      player.heading += input.turn * turnRate * dt;
+      const steerBlend = Math.min(1, dt * STEER_RESPONSE_PER_SEC);
+      player.steer += (targetTurn - player.steer) * steerBlend;
+
+      const turnRate = BASE_TURN_RATE - (player.speed / maxSpeed) * TURN_RATE_SPEED_LOSS;
+      player.heading += player.steer * turnRate * dt;
       player.x += Math.cos(player.heading) * player.speed * dt;
       player.y += Math.sin(player.heading) * player.speed * dt;
       player.progress += player.speed * dt;
