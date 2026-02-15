@@ -201,12 +201,62 @@ body.race-screen-active .app-header h1.title-snake-wave {
   outline: none;
 }
 
+.menu-field select {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  padding: 10px 12px;
+  font: inherit;
+  outline: none;
+}
+
 .menu-field input:focus {
   border-color: rgba(255, 210, 122, 0.9);
   box-shadow: 0 0 0 2px rgba(255, 210, 122, 0.2);
 }
 
+.menu-field select:focus {
+  border-color: rgba(255, 210, 122, 0.9);
+  box-shadow: 0 0 0 2px rgba(255, 210, 122, 0.2);
+}
+
 .menu-field input::placeholder {
+  color: rgba(241, 244, 255, 0.46);
+}
+
+.online-room-picker {
+  margin-top: 6px;
+  margin-bottom: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.online-room-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.online-room-actions input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  padding: 10px 12px;
+  font: inherit;
+  outline: none;
+}
+
+.online-room-actions input:focus {
+  border-color: rgba(255, 210, 122, 0.9);
+  box-shadow: 0 0 0 2px rgba(255, 210, 122, 0.2);
+}
+
+.online-room-actions input::placeholder {
   color: rgba(241, 244, 255, 0.46);
 }
 
@@ -673,6 +723,10 @@ body.race-screen-active .app-header h1.title-snake-wave {
 
   .actions {
     flex-wrap: wrap;
+  }
+
+  .online-room-actions {
+    grid-template-columns: 1fr;
   }
 
   .hud-overlay-layer {

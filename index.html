@@ -55,6 +55,25 @@
     <section id="screen-track" class="screen">
       <div class="panel">
         <h2>Выбор трассы</h2>
+        <div id="online-room-picker" class="online-room-picker" hidden>
+          <label class="menu-field" for="online-room-select">
+            <span>Комната (онлайн)</span>
+            <select id="online-room-select">
+              <option value="">Авто: подключиться или создать</option>
+            </select>
+          </label>
+          <div class="online-room-actions">
+            <input
+              id="online-room-id-input"
+              type="text"
+              maxlength="64"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Или введите ID комнаты вручную"
+            >
+            <button id="online-room-refresh" class="btn ghost" type="button">Обновить список</button>
+          </div>
+        </div>
         <div id="track-cards" class="card-grid"></div>
         <div class="actions">
           <button id="track-back" class="btn ghost">Назад</button>

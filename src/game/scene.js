@@ -33,6 +33,10 @@ const ONLINE_BODY_ITEM_TO_PICKUP_MIN_DIST = 40;
 const ONLINE_LANE_OFFSETS = [-13, -5, 5, 13];
 const ONLINE_LANE_STEER_GAIN = 58;
 const ONLINE_LANE_RETURN_DAMP = 0.9;
+const ONLINE_POSE_SMOOTH_GAIN = 18;
+const ONLINE_HEADING_SMOOTH_GAIN = 14;
+const ONLINE_POSE_TELEPORT_DIST = 160;
+const ONLINE_POSE_PREDICTION_MAX_SEC = 0.18;
 const TRACK_DEF_BY_ID = new Map(TRACK_DEFS.map((def) => [def.id, def]));
 const ONLINE_TRACK_CACHE = new Map();
 
@@ -49,6 +53,7 @@ export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle }
         this.segmentSpriteMap = new Map();
         this.trackMusicMap = new Map();
         this.onlineTrailMap = new Map();
+        this.onlinePoseMap = new Map();
         this.onlineLaneStateMap = new Map();
       }
 
@@ -273,6 +278,7 @@ function renderOnlineSnapshot(scene, onlineState, nowMs, renderIdle) {
     syncRacerRenderSprites(scene, [], false, getOnlineRacerMotionHeading);
     syncRacerLabels(scene, [], false);
     scene.onlineTrailMap?.clear?.();
+    scene.onlinePoseMap?.clear?.();
     scene.onlineLaneStateMap?.clear?.();
     scene.infoText.setVisible(true);
     scene.infoText.setText([
@@ -286,8 +292,9 @@ function renderOnlineSnapshot(scene, onlineState, nowMs, renderIdle) {
   }
 
   const players = Array.isArray(snapshot.players) ? snapshot.players : [];
+  const snapshotTick = Number(snapshot.tick);
   const onlineRacers = players.map((player, playerIndex) =>
-    buildOnlineRacer(scene, player, playerIndex, onlineTrack, onlineState?.sessionId)
+    buildOnlineRacer(scene, player, playerIndex, onlineTrack, onlineState?.sessionId, nowMs, snapshotTick)
   );
   pruneOnlineTrails(scene, onlineRacers);
 
@@ -422,9 +429,9 @@ function isOnlineBodyItemPositionValid(x, y, track, bodyItems, pickups) {
   return true;
 }
 
-function buildOnlineRacer(scene, player, playerIndex, onlineTrack, selfSessionId) {
-  const marker = getOnlinePlayerPose(scene, player, playerIndex, onlineTrack);
-  const sessionKey = String(player?.sessionId || "unknown");
+function buildOnlineRacer(scene, player, playerIndex, onlineTrack, selfSessionId, nowMs, snapshotTick) {
+  const sessionKey = resolveOnlineSessionKey(player, playerIndex);
+  const marker = getOnlinePlayerPose(scene, player, playerIndex, onlineTrack, sessionKey, nowMs, snapshotTick);
   const trail = updateOnlineTrail(scene, sessionKey, marker.x, marker.y, marker.heading);
   const snake = pickOnlineSnakeVariant(player);
   const bodySegments = buildOnlineBodySegmentsFromTrail(trail, marker.heading);
@@ -445,35 +452,122 @@ function buildOnlineRacer(scene, player, playerIndex, onlineTrack, selfSessionId
   };
 }
 
-function getOnlinePlayerPose(scene, player, playerIndex, onlineTrack) {
+function resolveOnlineSessionKey(player, playerIndex) {
+  if (player?.sessionId) {
+    return String(player.sessionId);
+  }
+  if (player?.userId) {
+    return String(player.userId);
+  }
+  return `online_${playerIndex}`;
+}
+
+function getOnlinePlayerPose(scene, player, playerIndex, onlineTrack, sessionKey, nowMs, snapshotTick) {
   const rawX = Number(player?.x);
   const rawY = Number(player?.y);
   const rawHeading = Number(player?.heading);
-  if (Number.isFinite(rawX) && Number.isFinite(rawY)) {
-    return {
-      x: rawX,
-      y: rawY,
-      heading: Number.isFinite(rawHeading) ? rawHeading : 0,
-    };
-  }
+  const rawSpeed = Math.max(0, Number(player?.speed) || 0);
 
-  if (onlineTrack?.runtime) {
+  let targetX = rawX;
+  let targetY = rawY;
+  let targetHeading = rawHeading;
+
+  if (!(Number.isFinite(targetX) && Number.isFinite(targetY)) && onlineTrack?.runtime) {
     const progressMeters = Number(player?.progress) || 0;
     const lapFractionRaw = progressMeters / ONLINE_PROGRESS_LAP_METERS;
     const lapFraction = lapFractionRaw - Math.floor(lapFractionRaw);
     const sample = sampleTrack(onlineTrack.runtime, lapFraction);
-    return {
-      x: sample.x,
-      y: sample.y,
-      heading: Number.isFinite(rawHeading) ? rawHeading : Math.atan2(sample.tangent.y, sample.tangent.x),
-    };
+    targetX = sample.x;
+    targetY = sample.y;
+    targetHeading = Number.isFinite(rawHeading) ? rawHeading : Math.atan2(sample.tangent.y, sample.tangent.x);
   }
 
-  return {
-    x: CANVAS_WIDTH * 0.5,
-    y: CANVAS_HEIGHT * 0.5,
-    heading: Number.isFinite(rawHeading) ? rawHeading : 0,
-  };
+  if (!(Number.isFinite(targetX) && Number.isFinite(targetY))) {
+    targetX = CANVAS_WIDTH * 0.5;
+    targetY = CANVAS_HEIGHT * 0.5;
+  }
+  if (!Number.isFinite(targetHeading)) {
+    targetHeading = 0;
+  }
+
+  const renderNowMs =
+    Number.isFinite(nowMs)
+      ? nowMs
+      : typeof performance !== "undefined" && Number.isFinite(performance.now())
+      ? performance.now()
+      : Date.now();
+
+  return resolveSmoothedOnlinePose(scene, sessionKey, {
+    x: targetX,
+    y: targetY,
+    heading: targetHeading,
+    speed: rawSpeed,
+    tick: Number.isFinite(snapshotTick) ? snapshotTick : null,
+    nowMs: renderNowMs,
+  });
+}
+
+function resolveSmoothedOnlinePose(scene, sessionKey, target) {
+  if (!scene.onlinePoseMap) {
+    scene.onlinePoseMap = new Map();
+  }
+
+  let pose = scene.onlinePoseMap.get(sessionKey);
+  if (!pose) {
+    pose = {
+      x: target.x,
+      y: target.y,
+      heading: target.heading,
+      targetX: target.x,
+      targetY: target.y,
+      targetHeading: target.heading,
+      targetSpeed: target.speed || 0,
+      lastSnapshotTick: target.tick,
+      lastSnapshotAtMs: target.nowMs,
+      lastUpdateAtMs: target.nowMs,
+    };
+    scene.onlinePoseMap.set(sessionKey, pose);
+    return { x: pose.x, y: pose.y, heading: pose.heading };
+  }
+
+  const dxToTarget = target.x - pose.targetX;
+  const dyToTarget = target.y - pose.targetY;
+  const headingToTarget = Math.abs(shortestAngleDelta(target.heading, pose.targetHeading));
+  const tickChanged = Number.isFinite(target.tick) && target.tick !== pose.lastSnapshotTick;
+  const targetChanged = Math.hypot(dxToTarget, dyToTarget) > 0.5 || headingToTarget > 0.015;
+  if (tickChanged || targetChanged) {
+    pose.targetX = target.x;
+    pose.targetY = target.y;
+    pose.targetHeading = target.heading;
+    pose.targetSpeed = target.speed || 0;
+    pose.lastSnapshotTick = target.tick;
+    pose.lastSnapshotAtMs = target.nowMs;
+  }
+
+  const dtSec = clamp((target.nowMs - pose.lastUpdateAtMs) / 1000, 0.001, 0.2);
+  pose.lastUpdateAtMs = target.nowMs;
+
+  const snapshotAgeSec = clamp((target.nowMs - pose.lastSnapshotAtMs) / 1000, 0, ONLINE_POSE_PREDICTION_MAX_SEC);
+  const projectedX = pose.targetX + Math.cos(pose.targetHeading) * pose.targetSpeed * snapshotAgeSec;
+  const projectedY = pose.targetY + Math.sin(pose.targetHeading) * pose.targetSpeed * snapshotAgeSec;
+  const projectedHeading = pose.targetHeading;
+
+  const jumpDistance = Math.hypot(projectedX - pose.x, projectedY - pose.y);
+  if (jumpDistance > ONLINE_POSE_TELEPORT_DIST) {
+    pose.x = projectedX;
+    pose.y = projectedY;
+    pose.heading = projectedHeading;
+    return { x: pose.x, y: pose.y, heading: pose.heading };
+  }
+
+  const followAlpha = 1 - Math.exp(-ONLINE_POSE_SMOOTH_GAIN * dtSec);
+  pose.x += (projectedX - pose.x) * followAlpha;
+  pose.y += (projectedY - pose.y) * followAlpha;
+
+  const headingAlpha = 1 - Math.exp(-ONLINE_HEADING_SMOOTH_GAIN * dtSec);
+  pose.heading += shortestAngleDelta(projectedHeading, pose.heading) * headingAlpha;
+
+  return { x: pose.x, y: pose.y, heading: pose.heading };
 }
 
 function pickOnlineSnakeVariant(player) {
@@ -531,6 +625,13 @@ function pruneOnlineTrails(scene, onlineRacers) {
     for (const key of scene.onlineLaneStateMap.keys()) {
       if (!liveKeys.has(key)) {
         scene.onlineLaneStateMap.delete(key);
+      }
+    }
+  }
+  if (scene.onlinePoseMap) {
+    for (const key of scene.onlinePoseMap.keys()) {
+      if (!liveKeys.has(key)) {
+        scene.onlinePoseMap.delete(key);
       }
     }
   }
