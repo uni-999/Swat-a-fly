@@ -125,6 +125,7 @@ export function createRaceFlowApi({
     race.standings = computeStandings(race);
 
     const elapsedMs = nowMs - race.raceStartMs;
+    const hasLapWinner = race.racers.some((racer) => racer.completedLap);
     if (elapsedMs > RACE_TIMEOUT_MS) {
       for (const racer of race.racers) {
         if (!racer.finished) {
@@ -133,6 +134,8 @@ export function createRaceFlowApi({
           racer.finishTimeMs = Math.max(0, elapsedMs + racer.timePenaltyMs);
         }
       }
+      finishRace(race, nowMs);
+    } else if (hasLapWinner) {
       finishRace(race, nowMs);
     } else if (race.racers.every((racer) => racer.finished)) {
       finishRace(race, nowMs);

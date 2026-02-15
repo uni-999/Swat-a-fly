@@ -1,6 +1,7 @@
-import {
+﻿import {
   TOTAL_RACERS,
   TAU,
+  LAPS_TO_FINISH,
   BODY_ITEM_COUNT,
   START_BODY_SEGMENTS,
   BODY_ITEM_MIN_SEPARATION,
@@ -61,6 +62,7 @@ export function createRaceState(trackDef, selectedSnake, debugMode, startMs = pe
       nextCheckpointIndex: 1,
       checkpointsPassed: 0,
       readyToFinish: false,
+      lapsCompleted: 0,
       finished: false,
       finishTimeMs: NaN,
       completedLap: false,
@@ -104,6 +106,9 @@ export function createRaceState(trackDef, selectedSnake, debugMode, startMs = pe
     bodyCrossingGraceUntilMs: 0,
     finishedAtMs: 0,
     overlayUntilMs: 0,
+    lapsToFinish: Number.isFinite(trackDef?.lapsToFinish)
+      ? Math.max(1, Math.floor(trackDef.lapsToFinish))
+      : LAPS_TO_FINISH,
     focusRacerId: racers[0].id,
     standings: [],
     resultsPushed: false,
@@ -259,3 +264,4 @@ export function initializeRacerBodyHistory(racer) {
   }
   racer.bodySegments.length = 0;
 }
+

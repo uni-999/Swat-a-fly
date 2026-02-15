@@ -13,7 +13,7 @@ import { createAiApi } from "./ai.js";
 import { createRaceFlowApi } from "./raceFlow.js";
 import { createRaceState, randomizeBodyItemPosition } from "./raceSetup.js";
 import { createHudApi } from "./hud.js";
-import { createSceneApi } from "./scene.js";
+import { createSceneApi } from "./scene.js?v=20260215_online_hotfix_1";
 import { createUiFlowApi } from "./uiFlow.js";
 import { createCoreUiApi } from "./coreUi.js";
 import { createOnlineRoomClientApi } from "./onlineRoomClient.js";

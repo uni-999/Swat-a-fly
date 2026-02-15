@@ -5,13 +5,19 @@ function updateCheckpointProgress(race, racer, nowMs) {
   const checkpoints = race.track.checkpoints;
   const startCheckpoint = checkpoints[0];
   const startDist = Math.hypot(startCheckpoint.x - racer.x, startCheckpoint.y - racer.y);
+  const lapGoal = Math.max(1, Math.floor(Number.isFinite(race?.lapsToFinish) ? race.lapsToFinish : 1));
 
   if (racer.readyToFinish && startDist <= race.track.checkpointRadius && nowMs - race.raceStartMs > 4500) {
-    racer.finished = true;
-    racer.completedLap = true;
-    racer.finishTimeMs = Math.max(0, nowMs - race.raceStartMs + racer.timePenaltyMs);
-    racer.speed = Math.max(racer.speed, racer.stats.maxSpeed * FINISHED_COAST_SPEED_FACTOR);
-    return;
+    racer.lapsCompleted = (racer.lapsCompleted || 0) + 1;
+    racer.readyToFinish = false;
+    racer.nextCheckpointIndex = 1;
+    if (racer.lapsCompleted >= lapGoal) {
+      racer.finished = true;
+      racer.completedLap = true;
+      racer.finishTimeMs = Math.max(0, nowMs - race.raceStartMs + racer.timePenaltyMs);
+      racer.speed = Math.max(racer.speed, racer.stats.maxSpeed * FINISHED_COAST_SPEED_FACTOR);
+      return;
+    }
   }
 
   const next = checkpoints[racer.nextCheckpointIndex];
