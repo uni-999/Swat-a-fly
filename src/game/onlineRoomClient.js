@@ -3,7 +3,7 @@
 const COLYSEUS_ESM_URL = "https://cdn.jsdelivr.net/npm/colyseus.js@0.16.17/+esm";
 const ONLINE_USER_ID_KEY = "snake_online_user_id_v1";
 const ONLINE_PING_INTERVAL_MS = 4000;
-const MATCH_PROXY_PATH = "/match";
+const MATCH_PROXY_PATH = "/match/";
 
 export function createOnlineRoomClientApi({ state } = {}) {
   let colyseusModulePromise = null;
@@ -145,11 +145,6 @@ export function createOnlineRoomClientApi({ state } = {}) {
           break;
         } catch (error) {
           lastError = error;
-          try {
-            client?.connection?.close?.();
-          } catch (closeError) {
-            // Ignore close failures while trying fallback endpoint.
-          }
           client = null;
           room = null;
         }
