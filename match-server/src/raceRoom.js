@@ -5,12 +5,38 @@ const COUNTDOWN_MS = 3000;
 const STEER_RESPONSE_PER_SEC = 8.5;
 const BASE_TURN_RATE = 2.15;
 const TURN_RATE_SPEED_LOSS = 0.85;
+const GRID_OFFSETS = [-18, -6, 6, 18];
+const TRACK_SPAWN_POSES = {
+  canyon_loop: { x: 881.52, y: 298.41, heading: 1.6004 },
+  switchback_run: { x: 68.76, y: 307.23, heading: -1.4717 },
+  twin_fang: { x: 130.0, y: 300.0, heading: -1.3260 },
+};
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 function safeNumber(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeTrackId(trackId) {
+  return String(trackId || "canyon_loop")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_");
+}
+
+function getSpawnPose(trackId, slotIndex = 0) {
+  const key = normalizeTrackId(trackId);
+  const base = TRACK_SPAWN_POSES[key] || TRACK_SPAWN_POSES.canyon_loop;
+  const offset = GRID_OFFSETS[Math.abs(slotIndex) % GRID_OFFSETS.length];
+  const normalX = -Math.sin(base.heading);
+  const normalY = Math.cos(base.heading);
+  return {
+    x: base.x + normalX * offset,
+    y: base.y + normalY * offset,
+    heading: base.heading,
+  };
 }
 
 export class RaceRoom extends Room {
@@ -48,6 +74,7 @@ export class RaceRoom extends Room {
   onJoin(client, options) {
     const userId = options?.userId ? String(options.userId) : client.sessionId;
     const displayName = options?.name ? String(options.name) : `Player ${this.clients.length}`;
+    const spawnPose = getSpawnPose(this.trackId, this.players.size);
 
     this.players.set(client.sessionId, {
       sessionId: client.sessionId,
@@ -57,9 +84,9 @@ export class RaceRoom extends Room {
       isBot: false,
       ready: true,
       input: { turn: 0, throttle: 0, brake: 0 },
-      x: 0,
-      y: 0,
-      heading: 0,
+      x: spawnPose.x,
+      y: spawnPose.y,
+      heading: spawnPose.heading,
       steer: 0,
       speed: 0,
       progress: 0,

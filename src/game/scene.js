@@ -359,43 +359,33 @@ function buildOnlineRacer(scene, player, playerIndex, onlineTrack, selfSessionId
 }
 
 function getOnlinePlayerPose(scene, player, playerIndex, onlineTrack) {
+  const rawX = Number(player?.x);
+  const rawY = Number(player?.y);
+  const rawHeading = Number(player?.heading);
+  if (Number.isFinite(rawX) && Number.isFinite(rawY)) {
+    return {
+      x: rawX,
+      y: rawY,
+      heading: Number.isFinite(rawHeading) ? rawHeading : 0,
+    };
+  }
+
   if (onlineTrack?.runtime) {
     const progressMeters = Number(player?.progress) || 0;
     const lapFractionRaw = progressMeters / ONLINE_PROGRESS_LAP_METERS;
     const lapFraction = lapFractionRaw - Math.floor(lapFractionRaw);
     const sample = sampleTrack(onlineTrack.runtime, lapFraction);
-    const normal = { x: -sample.tangent.y, y: sample.tangent.x };
-    const serverHeading = Number(player?.heading);
-    const heading = Number.isFinite(serverHeading)
-      ? serverHeading
-      : Math.atan2(sample.tangent.y, sample.tangent.x);
-    const baseLaneOffset = ONLINE_LANE_OFFSETS[Math.abs(playerIndex) % ONLINE_LANE_OFFSETS.length];
-    const sessionKey = String(player?.sessionId || player?.userId || player?.displayName || `p_${playerIndex}`);
-    const laneOffset = resolveOnlineLaneOffset(
-      scene,
-      sessionKey,
-      heading,
-      onlineTrack.runtime.roadWidth,
-      baseLaneOffset
-    );
     return {
-      x: sample.x + normal.x * laneOffset,
-      y: sample.y + normal.y * laneOffset,
-      heading,
+      x: sample.x,
+      y: sample.y,
+      heading: Number.isFinite(rawHeading) ? rawHeading : Math.atan2(sample.tangent.y, sample.tangent.x),
     };
   }
 
-  const centerX = CANVAS_WIDTH * 0.5;
-  const centerY = CANVAS_HEIGHT * 0.5;
-  const scale = 0.28;
-  const maxDx = CANVAS_WIDTH * 0.44;
-  const maxDy = CANVAS_HEIGHT * 0.35;
-  const x = centerX + Math.max(-maxDx, Math.min(maxDx, (Number(player?.x) || 0) * scale));
-  const y = centerY + Math.max(-maxDy, Math.min(maxDy, (Number(player?.y) || 0) * scale));
   return {
-    x,
-    y,
-    heading: Number.isFinite(Number(player?.heading)) ? Number(player.heading) : 0,
+    x: CANVAS_WIDTH * 0.5,
+    y: CANVAS_HEIGHT * 0.5,
+    heading: Number.isFinite(rawHeading) ? rawHeading : 0,
   };
 }
 
@@ -543,14 +533,6 @@ function buildOnlineBodySegmentsFromTrail(trail, fallbackHeading) {
 }
 
 function getOnlineRacerMotionHeading(racer) {
-  if (racer?.bodySegments?.length) {
-    const first = racer.bodySegments[0];
-    const dx = racer.x - first.x;
-    const dy = racer.y - first.y;
-    if (Math.hypot(dx, dy) > 0.01) {
-      return Math.atan2(dy, dx);
-    }
-  }
   return racer?.heading || 0;
 }
 
