@@ -24,6 +24,8 @@ const ONLINE_TRAIL_MAX_POINTS = 220;
 const ONLINE_BODY_SEGMENT_COUNT = 10;
 const ONLINE_BODY_SEGMENT_SPACING = 8.4;
 const ONLINE_LANE_OFFSETS = [-13, -5, 5, 13];
+const ONLINE_LANE_STEER_GAIN = 58;
+const ONLINE_LANE_RETURN_DAMP = 0.9;
 const TRACK_DEF_BY_ID = new Map(TRACK_DEFS.map((def) => [def.id, def]));
 const ONLINE_TRACK_CACHE = new Map();
 
@@ -40,6 +42,7 @@ export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle }
         this.segmentSpriteMap = new Map();
         this.trackMusicMap = new Map();
         this.onlineTrailMap = new Map();
+        this.onlineLaneStateMap = new Map();
       }
 
       preload() {
@@ -263,6 +266,7 @@ function renderOnlineSnapshot(scene, onlineState, nowMs, renderIdle) {
     syncRacerRenderSprites(scene, [], false, getOnlineRacerMotionHeading);
     syncRacerLabels(scene, [], false);
     scene.onlineTrailMap?.clear?.();
+    scene.onlineLaneStateMap?.clear?.();
     scene.infoText.setVisible(true);
     scene.infoText.setText([
       `Online: ${status}`,
@@ -332,7 +336,7 @@ function resolveOnlineTrack(trackId) {
 }
 
 function buildOnlineRacer(scene, player, playerIndex, onlineTrack, selfSessionId) {
-  const marker = getOnlinePlayerPose(player, playerIndex, onlineTrack);
+  const marker = getOnlinePlayerPose(scene, player, playerIndex, onlineTrack);
   const sessionKey = String(player?.sessionId || "unknown");
   const trail = updateOnlineTrail(scene, sessionKey, marker.x, marker.y, marker.heading);
   const snake = pickOnlineSnakeVariant(player);
@@ -354,18 +358,28 @@ function buildOnlineRacer(scene, player, playerIndex, onlineTrack, selfSessionId
   };
 }
 
-function getOnlinePlayerPose(player, playerIndex, onlineTrack) {
+function getOnlinePlayerPose(scene, player, playerIndex, onlineTrack) {
   if (onlineTrack?.runtime) {
     const progressMeters = Number(player?.progress) || 0;
     const lapFractionRaw = progressMeters / ONLINE_PROGRESS_LAP_METERS;
     const lapFraction = lapFractionRaw - Math.floor(lapFractionRaw);
     const sample = sampleTrack(onlineTrack.runtime, lapFraction);
     const normal = { x: -sample.tangent.y, y: sample.tangent.x };
-    const laneOffset = ONLINE_LANE_OFFSETS[Math.abs(playerIndex) % ONLINE_LANE_OFFSETS.length];
+    const baseLaneOffset = ONLINE_LANE_OFFSETS[Math.abs(playerIndex) % ONLINE_LANE_OFFSETS.length];
+    const sessionKey = String(player?.sessionId || player?.userId || player?.displayName || `p_${playerIndex}`);
+    const laneOffset = resolveOnlineLaneOffset(
+      scene,
+      sessionKey,
+      Number(player?.heading),
+      onlineTrack.runtime.roadWidth,
+      baseLaneOffset
+    );
+    const tangentHeading = Math.atan2(sample.tangent.y, sample.tangent.x);
+    const headingTilt = Math.max(-0.35, Math.min(0.35, (laneOffset - baseLaneOffset) / Math.max(40, onlineTrack.runtime.roadWidth)));
     return {
       x: sample.x + normal.x * laneOffset,
       y: sample.y + normal.y * laneOffset,
-      heading: Math.atan2(sample.tangent.y, sample.tangent.x),
+      heading: tangentHeading + headingTilt,
     };
   }
 
@@ -434,6 +448,34 @@ function pruneOnlineTrails(scene, onlineRacers) {
       scene.onlineTrailMap.delete(key);
     }
   }
+  if (scene.onlineLaneStateMap) {
+    for (const key of scene.onlineLaneStateMap.keys()) {
+      if (!liveKeys.has(key)) {
+        scene.onlineLaneStateMap.delete(key);
+      }
+    }
+  }
+}
+
+function resolveOnlineLaneOffset(scene, sessionKey, rawHeading, roadWidth, baseLaneOffset) {
+  if (!scene.onlineLaneStateMap) {
+    scene.onlineLaneStateMap = new Map();
+  }
+  const maxLane = Math.max(26, roadWidth * 0.62);
+  const heading = Number.isFinite(rawHeading) ? rawHeading : 0;
+  let laneState = scene.onlineLaneStateMap.get(sessionKey);
+  if (!laneState) {
+    laneState = { laneOffset: baseLaneOffset, lastHeading: heading };
+    scene.onlineLaneStateMap.set(sessionKey, laneState);
+    return laneState.laneOffset;
+  }
+
+  const delta = shortestAngleDelta(heading, laneState.lastHeading);
+  laneState.laneOffset += delta * ONLINE_LANE_STEER_GAIN;
+  laneState.laneOffset = baseLaneOffset + (laneState.laneOffset - baseLaneOffset) * ONLINE_LANE_RETURN_DAMP;
+  laneState.laneOffset = Math.max(-maxLane, Math.min(maxLane, laneState.laneOffset));
+  laneState.lastHeading = heading;
+  return laneState.laneOffset;
 }
 
 function buildOnlineBodySegmentsFromTrail(trail, fallbackHeading) {
@@ -518,4 +560,15 @@ function hashString(value) {
     hash |= 0;
   }
   return hash;
+}
+
+function shortestAngleDelta(next, prev) {
+  let diff = next - prev;
+  while (diff > Math.PI) {
+    diff -= Math.PI * 2;
+  }
+  while (diff < -Math.PI) {
+    diff += Math.PI * 2;
+  }
+  return diff;
 }
