@@ -270,3 +270,7 @@ npx serve . -l 5500
 - 2026-02: Frontend step-9 modularization done: Phaser scene/bootstrap logic moved to `src/game/scene.js` (`initPhaser`, background keep-alive policy, track music sync).
 - 2026-02: Frontend step-10 modularization done: UI flow moved to `src/game/uiFlow.js` (screen switching, key handling, snake/track cards, race start/restart/next-track wiring).
 - 2026-02: Frontend step-11 modularization done: remaining core UI helpers moved to `src/game/coreUi.js` (overlay/countdown helpers, race render wrappers, local best-time formatting, toast helper).
+- 2026-02: Frontend step-12 modularization done: composition/bootstrap moved to `src/game/app.js`; `script.js` is now a thin entry-point that only calls `bootstrapApp()`.
+
+- 2026-02: Refactor step-13: extracted body/effects/hunger/pickup logic from `src/game/simulation.js` into `src/game/simBodySystem.js`; kept the same simulation exports for compatibility.
+- 2026-02: Refactor step-14: extracted progress/standings logic into `src/game/simProgress.js`; `src/game/simulation.js` now focuses on movement, anti-stall and collisions.
