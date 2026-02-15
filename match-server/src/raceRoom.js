@@ -2,9 +2,9 @@ import { Room } from "@colyseus/core";
 
 const TRACK_LENGTH = 12000;
 const COUNTDOWN_MS = 3000;
-const STEER_RESPONSE_PER_SEC = 8.5;
-const BASE_TURN_RATE = 2.15;
-const TURN_RATE_SPEED_LOSS = 0.85;
+const STEER_RESPONSE_PER_SEC = 12.0;
+const BASE_TURN_RATE = 2.9;
+const TURN_RATE_SPEED_LOSS = 1.15;
 const GRID_OFFSETS = [-18, -6, 6, 18];
 const TRACK_SPAWN_POSES = {
   canyon_loop: { x: 881.52, y: 298.41, heading: 1.6004 },

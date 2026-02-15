@@ -9,6 +9,7 @@
 import {
   SNAKES,
   TRACK_DEFS,
+  PICKUP_ORDER,
   snakeHeadTextureKey,
   snakeSegmentTextureKey,
   snakeHeadTexturePath,
@@ -23,6 +24,12 @@ const ONLINE_TRAIL_MIN_STEP = 2.5;
 const ONLINE_TRAIL_MAX_POINTS = 220;
 const ONLINE_BODY_SEGMENT_COUNT = 10;
 const ONLINE_BODY_SEGMENT_SPACING = 8.4;
+const ONLINE_BODY_ITEM_COUNT = 12;
+const ONLINE_PICKUP_LANE_RATIOS = [-0.04, 0.04, 0];
+const ONLINE_BODY_LANE_RATIOS = [-0.07, -0.03, 0, 0.03, 0.07];
+const ONLINE_BODY_ITEM_MIN_SEPARATION = 64;
+const ONLINE_BODY_ITEM_TO_CHECKPOINT_MIN_DIST = 62;
+const ONLINE_BODY_ITEM_TO_PICKUP_MIN_DIST = 40;
 const ONLINE_LANE_OFFSETS = [-13, -5, 5, 13];
 const ONLINE_LANE_STEER_GAIN = 58;
 const ONLINE_LANE_RETURN_DAMP = 0.9;
@@ -323,16 +330,96 @@ function resolveOnlineTrack(trackId) {
   }
 
   const runtime = buildTrackRuntime(trackDef);
+  const pickups = createOnlinePickups(runtime);
+  const bodyItems = createOnlineBodyItems(runtime, trackId, pickups);
   const raceView = {
     trackDef,
     track: runtime,
-    bodyItems: [],
-    pickups: [],
+    bodyItems,
+    pickups,
     venomShots: [],
   };
   const built = { trackDef, runtime, raceView };
   ONLINE_TRACK_CACHE.set(trackId, built);
   return built;
+}
+
+function createOnlinePickups(track) {
+  const fractions = Array.isArray(track?.pickupFractions) ? track.pickupFractions : [];
+  return fractions.map((fraction, index) => {
+    const sample = sampleTrack(track, fraction);
+    const normal = { x: -sample.tangent.y, y: sample.tangent.x };
+    const laneRatio = ONLINE_PICKUP_LANE_RATIOS[index % ONLINE_PICKUP_LANE_RATIOS.length];
+    const lateral = track.roadWidth * laneRatio;
+    return {
+      id: `online_pickup_${index + 1}`,
+      type: PICKUP_ORDER[index % PICKUP_ORDER.length],
+      x: sample.x + normal.x * lateral,
+      y: sample.y + normal.y * lateral,
+      active: true,
+      radius: 12,
+    };
+  });
+}
+
+function createOnlineBodyItems(track, trackId, pickups = []) {
+  const items = [];
+  const rng = createSeededRng(hashString(`online_body_${trackId || "track"}`));
+  const baseOffset = rng();
+
+  for (let i = 0; i < ONLINE_BODY_ITEM_COUNT; i += 1) {
+    let chosen = null;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const fraction = mod1(baseOffset + i / ONLINE_BODY_ITEM_COUNT + (rng() - 0.5) * 0.08);
+      const sample = sampleTrack(track, fraction);
+      const normal = { x: -sample.tangent.y, y: sample.tangent.x };
+      const laneBase = ONLINE_BODY_LANE_RATIOS[(i + attempt) % ONLINE_BODY_LANE_RATIOS.length];
+      const laneRatio = clamp(laneBase + (rng() - 0.5) * 0.025, -0.12, 0.12);
+      const lateral = track.roadWidth * laneRatio;
+      const x = sample.x + normal.x * lateral;
+      const y = sample.y + normal.y * lateral;
+      if (isOnlineBodyItemPositionValid(x, y, track, items, pickups)) {
+        chosen = { x, y };
+        break;
+      }
+    }
+
+    if (!chosen) {
+      const fallbackSample = sampleTrack(track, mod1(baseOffset + i / ONLINE_BODY_ITEM_COUNT));
+      chosen = { x: fallbackSample.x, y: fallbackSample.y };
+    }
+
+    items.push({
+      id: `online_body_item_${i + 1}`,
+      type: rng() < 0.58 ? "APPLE" : "CACTUS",
+      x: chosen.x,
+      y: chosen.y,
+      radius: 11,
+      active: true,
+    });
+  }
+
+  return items;
+}
+
+function isOnlineBodyItemPositionValid(x, y, track, bodyItems, pickups) {
+  for (let i = 0; i < track.checkpoints.length; i += 1) {
+    const cp = track.checkpoints[i];
+    if (sqrDistance(x, y, cp.x, cp.y) < ONLINE_BODY_ITEM_TO_CHECKPOINT_MIN_DIST ** 2) {
+      return false;
+    }
+  }
+  for (const pickup of pickups) {
+    if (sqrDistance(x, y, pickup.x, pickup.y) < ONLINE_BODY_ITEM_TO_PICKUP_MIN_DIST ** 2) {
+      return false;
+    }
+  }
+  for (const item of bodyItems) {
+    if (sqrDistance(x, y, item.x, item.y) < ONLINE_BODY_ITEM_MIN_SEPARATION ** 2) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function buildOnlineRacer(scene, player, playerIndex, onlineTrack, selfSessionId) {
@@ -544,6 +631,28 @@ function hashString(value) {
     hash |= 0;
   }
   return hash;
+}
+
+function mod1(value) {
+  return ((value % 1) + 1) % 1;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function sqrDistance(ax, ay, bx, by) {
+  const dx = ax - bx;
+  const dy = ay - by;
+  return dx * dx + dy * dy;
+}
+
+function createSeededRng(seed) {
+  let state = (seed >>> 0) || 1;
+  return () => {
+    state = (1664525 * state + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
 }
 
 function shortestAngleDelta(next, prev) {
