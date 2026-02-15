@@ -173,10 +173,8 @@ export class RaceRoom extends Room {
       const drag = 1.15;
       const throttleInput = clamp(safeNumber(input?.throttle, 0), 0, 1);
       const brakeInput = clamp(safeNumber(input?.brake, 0), 0, 1);
-      const autoThrottle = player.isBot ? 0.88 : 0.72;
-      const throttle = Math.max(throttleInput, autoThrottle);
 
-      player.speed += (throttle * accel - brakeInput * brakeForce - drag * player.speed) * dt;
+      player.speed += (throttleInput * accel - brakeInput * brakeForce - drag * player.speed) * dt;
       player.speed = clamp(player.speed, 0, maxSpeed);
 
       const turnRate = 2.9 - (player.speed / maxSpeed) * 1.2;
