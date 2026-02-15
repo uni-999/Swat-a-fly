@@ -9,8 +9,15 @@ import {
   BODY_ITEM_TO_PICKUP_MIN_DIST,
 } from "./config.js";
 import { SNAKES, PICKUP_ORDER, NPC_PROFILES } from "./catalog.js";
-import { sqrDistance, mod1 } from "./utils.js";
-import { buildTrackRuntime, sampleTrack } from "./trackMath.js";
+import { clamp, sqrDistance, mod1 } from "./utils.js";
+import { buildTrackRuntime, sampleTrack, projectOnTrack } from "./trackMath.js";
+
+const PICKUP_LANE_RATIOS = [-0.04, 0.04, 0];
+const BODY_ITEM_LANE_RATIOS = [-0.07, -0.03, 0, 0.03, 0.07];
+const BODY_ITEM_FRACTION_JITTER = 0.06;
+const BODY_ITEM_LANE_JITTER = 0.03;
+const BODY_ITEM_ROUTE_ATTEMPTS = 48;
+const MAX_OBJECT_LANE_RATIO = 0.1;
 
 export function createRaceState(trackDef, selectedSnake, debugMode, startMs = performance.now()) {
   const track = buildTrackRuntime(trackDef);
@@ -124,25 +131,28 @@ export function normalizeNameToken(value) {
 
 export function createPickups(track) {
   return track.pickupFractions.map((fraction, index) => {
-    const sample = sampleTrack(track, fraction);
-    const tangent = sample.tangent;
-    const normal = { x: -tangent.y, y: tangent.x };
-    const lateral = (index % 2 === 0 ? 1 : -1) * (track.roadWidth * 0.32);
+    const baseLane = PICKUP_LANE_RATIOS[index % PICKUP_LANE_RATIOS.length];
+    const placement = placeTrackObject(track, fraction, baseLane);
     return {
       id: `pickup_${index + 1}`,
       type: PICKUP_ORDER[index % PICKUP_ORDER.length],
-      x: sample.x + normal.x * lateral,
-      y: sample.y + normal.y * lateral,
+      x: placement.x,
+      y: placement.y,
       active: true,
       respawnAtMs: 0,
       radius: 12,
+      routeFraction: placement.fraction,
+      laneRatio: placement.laneRatio,
     };
   });
 }
 
 export function createBodyItems(track, pickups) {
   const items = [];
+  const baseOffset = Math.random();
   for (let i = 0; i < BODY_ITEM_COUNT; i += 1) {
+    const routeFraction = mod1(baseOffset + i / BODY_ITEM_COUNT + (Math.random() - 0.5) * 0.04);
+    const laneRatio = BODY_ITEM_LANE_RATIOS[i % BODY_ITEM_LANE_RATIOS.length];
     const item = {
       id: `body_item_${i + 1}`,
       type: Math.random() < 0.58 ? "APPLE" : "CACTUS",
@@ -151,6 +161,8 @@ export function createBodyItems(track, pickups) {
       radius: 11,
       active: true,
       respawnAtMs: 0,
+      routeFraction,
+      laneRatio,
     };
     randomizeBodyItemPosition(item, track, items, pickups);
     items.push(item);
@@ -159,34 +171,45 @@ export function createBodyItems(track, pickups) {
 }
 
 export function randomizeBodyItemPosition(item, track, occupiedItems = [], pickups = []) {
+  const baseFraction = Number.isFinite(item.routeFraction) ? item.routeFraction : Math.random();
+  const baseLaneRatio = Number.isFinite(item.laneRatio)
+    ? item.laneRatio
+    : BODY_ITEM_LANE_RATIOS[Math.floor(Math.random() * BODY_ITEM_LANE_RATIOS.length)];
   let chosen = null;
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const sample = sampleTrack(track, Math.random());
-    const side = Math.random() < 0.5 ? -1 : 1;
-    const lateral = side * (Math.random() * track.roadWidth * 0.45);
-    const normal = { x: -sample.tangent.y, y: sample.tangent.x };
-    const x = sample.x + normal.x * lateral;
-    const y = sample.y + normal.y * lateral;
-    if (isBodyItemPositionValid(item, x, y, track, occupiedItems, pickups)) {
-      chosen = { x, y };
+
+  for (let attempt = 0; attempt < BODY_ITEM_ROUTE_ATTEMPTS; attempt += 1) {
+    const attemptFraction = mod1(baseFraction + (Math.random() - 0.5) * BODY_ITEM_FRACTION_JITTER);
+    const attemptLaneRatio = clamp(
+      baseLaneRatio + (Math.random() - 0.5) * BODY_ITEM_LANE_JITTER,
+      -MAX_OBJECT_LANE_RATIO,
+      MAX_OBJECT_LANE_RATIO,
+    );
+    const placement = placeTrackObject(track, attemptFraction, attemptLaneRatio);
+    if (isBodyItemPositionValid(item, placement.x, placement.y, track, occupiedItems, pickups)) {
+      chosen = placement;
       break;
     }
   }
+
   if (!chosen) {
-    const sample = sampleTrack(track, Math.random());
-    const normal = { x: -sample.tangent.y, y: sample.tangent.x };
-    const side = Math.random() < 0.5 ? -1 : 1;
-    const lateral = side * (Math.random() * track.roadWidth * 0.45);
-    chosen = { x: sample.x + normal.x * lateral, y: sample.y + normal.y * lateral };
+    chosen = placeTrackObject(track, baseFraction, baseLaneRatio);
   }
+
   item.x = chosen.x;
   item.y = chosen.y;
+  item.routeFraction = chosen.fraction;
+  item.laneRatio = chosen.laneRatio;
+
   if (Math.random() < 0.35) {
     item.type = item.type === "APPLE" ? "CACTUS" : "APPLE";
   }
 }
 
 export function isBodyItemPositionValid(item, x, y, track, occupiedItems, pickups) {
+  const projection = projectOnTrack(track, x, y);
+  if (!projection || projection.distance > track.roadWidth * 0.32) {
+    return false;
+  }
   for (let i = 0; i < track.checkpoints.length; i += 1) {
     const cp = track.checkpoints[i];
     const minDist = i === 0 ? BODY_ITEM_TO_START_CHECKPOINT_MIN_DIST : BODY_ITEM_TO_CHECKPOINT_MIN_DIST;
@@ -208,6 +231,19 @@ export function isBodyItemPositionValid(item, x, y, track, occupiedItems, pickup
     }
   }
   return true;
+}
+
+function placeTrackObject(track, fraction, laneRatio = 0) {
+  const sample = sampleTrack(track, fraction);
+  const normal = { x: -sample.tangent.y, y: sample.tangent.x };
+  const cleanLaneRatio = clamp(laneRatio, -MAX_OBJECT_LANE_RATIO, MAX_OBJECT_LANE_RATIO);
+  const lateral = track.roadWidth * cleanLaneRatio;
+  return {
+    x: sample.x + normal.x * lateral,
+    y: sample.y + normal.y * lateral,
+    fraction: sample.fraction,
+    laneRatio: cleanLaneRatio,
+  };
 }
 
 export function initializeRacerBodyHistory(racer) {

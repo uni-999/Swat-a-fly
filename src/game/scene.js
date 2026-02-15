@@ -1,4 +1,11 @@
-import { CANVAS_WIDTH, CANVAS_HEIGHT, TRACK_MUSIC } from "./config.js";
+import {
+  CANVAS_WIDTH,
+  CANVAS_HEIGHT,
+  MENU_MUSIC,
+  TRACK_BACKDROP_IMAGES,
+  TRACK_MUSIC,
+  TRACK_SURFACE_TILES,
+} from "./config.js";
 import {
   SNAKES,
   snakeHeadTextureKey,
@@ -28,6 +35,18 @@ export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle }
         }
         for (const musicCfg of Object.values(TRACK_MUSIC)) {
           this.load.audio(musicCfg.key, musicCfg.path);
+        }
+        if (MENU_MUSIC?.key && MENU_MUSIC?.path) {
+          this.load.audio(MENU_MUSIC.key, MENU_MUSIC.path);
+        }
+        for (const backdropCfg of Object.values(TRACK_BACKDROP_IMAGES)) {
+          if (!backdropCfg?.key || !backdropCfg?.path) {
+            continue;
+          }
+          this.load.image(backdropCfg.key, backdropCfg.path);
+        }
+        for (const tileCfg of Object.values(TRACK_SURFACE_TILES)) {
+          this.load.image(tileCfg.key, tileCfg.path);
         }
       }
 
@@ -59,6 +78,10 @@ export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle }
           const trackMusic = this.sound.add(musicCfg.key, { volume: musicCfg.volume });
           trackMusic.setLoop(true);
           this.trackMusicMap.set(trackId, trackMusic);
+        }
+        if (MENU_MUSIC?.key && this.cache.audio.exists(MENU_MUSIC.key)) {
+          this.menuMusic = this.sound.add(MENU_MUSIC.key, { volume: MENU_MUSIC.volume });
+          this.menuMusic.setLoop(true);
         }
 
         applyBackgroundRunPolicy(this.game);
@@ -142,15 +165,15 @@ export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle }
 
   function syncRaceMusic() {
     const scene = state.raceScene;
-    if (!scene || !scene.trackMusicMap || !scene.trackMusicMap.size) {
+    if (!scene) {
       return;
     }
     const activeTrackId =
       state.currentScreen === "race"
-        ? state.race?.trackDef?.id || state.online?.trackId || null
+        ? state.race?.trackDef?.id || (state.online?.active ? state.online?.trackId : null) || null
         : null;
 
-    scene.trackMusicMap.forEach((music, trackId) => {
+    scene.trackMusicMap?.forEach((music, trackId) => {
       if (!music) {
         return;
       }
@@ -171,6 +194,26 @@ export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle }
         music.stop();
       }
     });
+
+    const menuMusic = scene.menuMusic || null;
+    if (!menuMusic) {
+      return;
+    }
+    const shouldPlayMenu = !activeTrackId;
+    if (shouldPlayMenu) {
+      if (!menuMusic.loop) {
+        menuMusic.setLoop(true);
+      }
+      if (!menuMusic.isPlaying) {
+        try {
+          menuMusic.play({ loop: true, volume: MENU_MUSIC?.volume ?? menuMusic.volume ?? 1 });
+        } catch (error) {
+          console.warn("[audio] menu music play failed:", error);
+        }
+      }
+    } else if (menuMusic.isPlaying) {
+      menuMusic.stop();
+    }
   }
 
   return {

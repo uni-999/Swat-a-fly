@@ -2,6 +2,8 @@ import { SEGMENT_RENDER_SCALE } from "./config.js";
 import { snakeHeadTextureKey, snakeSegmentTextureKey } from "./catalog.js";
 import { hexToInt, wrapAngle } from "./utils.js";
 
+const HEAD_SPRITE_ROTATION_OFFSET = Math.PI;
+
 export function drawRacers(scene, g, racers, getRacerMotionHeading) {
   racers.forEach((racer) => {
     if (!supportsSnakeSegmentSprite(scene, racer.typeId)) {
@@ -101,7 +103,7 @@ function syncRacerHeadSprite(scene, racer, visible, getRacerMotionHeading) {
   sprite.setVisible(visible);
   sprite.setPosition(racer.x, racer.y);
   const renderHeading = getRacerMotionHeading(racer, 0.02, 16) ?? racer.heading;
-  sprite.setRotation(renderHeading);
+  sprite.setRotation(wrapAngle(renderHeading + HEAD_SPRITE_ROTATION_OFFSET));
   const headSize = 28;
   sprite.setDisplaySize(headSize, headSize);
   sprite.setAlpha(1);

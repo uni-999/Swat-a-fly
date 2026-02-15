@@ -323,6 +323,7 @@ export function createUiFlowApi({
         return false;
       }
 
+      syncRaceMusic();
       showToast(`Онлайн: подключено к комнате ${connectResult.roomId || "-"}.`);
       pushOnlineInput();
       return true;

@@ -1,9 +1,13 @@
-import { CANVAS_WIDTH, CANVAS_HEIGHT } from "./config.js";
+import { CANVAS_WIDTH, CANVAS_HEIGHT, TRACK_BACKDROP_IMAGES, TRACK_SURFACE_TILES } from "./config.js";
 import { BODY_ITEMS, PICKUP_TYPES } from "./catalog.js";
 import { hexToInt } from "./utils.js";
 
-export function drawBackground(g) {
+export function drawBackground(g, options = {}) {
+  const skipBase = Boolean(options.skipBase);
   g.clear();
+  if (skipBase) {
+    return;
+  }
   // Grass base with warmer tint for a more natural terrain look.
   g.fillGradientStyle(0x264827, 0x264827, 0x1d381f, 0x1d381f, 1);
   g.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -15,12 +19,68 @@ export function drawBackground(g) {
   g.fillEllipse(CANVAS_WIDTH * 0.45, CANVAS_HEIGHT * 0.46, 300, 170);
 }
 
-export function drawRaceWorld(g, race) {
-  drawTrack(g, race.track);
+export function drawRaceWorld(g, race, options = {}) {
+  const skipTrack = Boolean(options.skipTrack);
+  if (!skipTrack) {
+    drawTrack(g, race.track);
+  }
   drawCheckpoints(g, race.track);
   drawBodyItems(g, race.bodyItems);
   drawPickups(g, race.pickups);
   drawVenomShots(g, race.venomShots || []);
+}
+
+export function ensureTrackBackdrop(scene, race) {
+  if (!scene || !race?.track || !race?.trackDef?.id) {
+    hideTrackBackdrop(scene);
+    return false;
+  }
+  const trackId = race.trackDef.id;
+  const directBackdropKey = TRACK_BACKDROP_IMAGES?.[trackId]?.key || null;
+  if (directBackdropKey && scene.textures.exists(directBackdropKey)) {
+    ensureBackdropSprite(scene, directBackdropKey);
+    return true;
+  }
+  if (!hasTrackTileAssets(scene)) {
+    hideTrackBackdrop(scene);
+    return false;
+  }
+
+  const textureKey = `track_surface_${trackId}`;
+  if (!scene.textures.exists(textureKey)) {
+    const canvas = createTrackBackdropCanvas(scene, race.track);
+    if (!canvas) {
+      hideTrackBackdrop(scene);
+      return false;
+    }
+    scene.textures.addCanvas(textureKey, canvas);
+  }
+
+  ensureBackdropSprite(scene, textureKey);
+  return true;
+}
+
+export function hideTrackBackdrop(scene) {
+  if (!scene?.trackBackdropSprite) {
+    return;
+  }
+  scene.trackBackdropSprite.setVisible(false);
+}
+
+function ensureBackdropSprite(scene, textureKey) {
+  let sprite = scene.trackBackdropSprite || null;
+  if (!sprite) {
+    sprite = scene.add.image(CANVAS_WIDTH * 0.5, CANVAS_HEIGHT * 0.5, textureKey).setDepth(-5);
+    scene.trackBackdropSprite = sprite;
+  } else if (sprite.texture.key !== textureKey) {
+    sprite.setTexture(textureKey);
+  }
+
+  sprite.setVisible(true);
+  sprite.setPosition(CANVAS_WIDTH * 0.5, CANVAS_HEIGHT * 0.5);
+  sprite.setDisplaySize(CANVAS_WIDTH, CANVAS_HEIGHT);
+  sprite.setDepth(-5);
+  scene.trackBackdropKey = textureKey;
 }
 
 function drawTrack(g, track) {
@@ -43,6 +103,101 @@ function drawTrack(g, track) {
   // Center marking.
   g.lineStyle(2, 0xf2dc9a, 0.76);
   drawDashedPolyline(g, track.points, 11, 11);
+}
+
+function hasTrackTileAssets(scene) {
+  return (
+    scene?.textures?.exists(TRACK_SURFACE_TILES.grass.key) &&
+    scene?.textures?.exists(TRACK_SURFACE_TILES.dirt.key) &&
+    scene?.textures?.exists(TRACK_SURFACE_TILES.asphalt.key)
+  );
+}
+
+function getTextureSource(scene, key) {
+  const texture = scene?.textures?.get(key);
+  if (!texture || typeof texture.getSourceImage !== "function") {
+    return null;
+  }
+  const source = texture.getSourceImage();
+  if (Array.isArray(source)) {
+    return source[0] || null;
+  }
+  return source || null;
+}
+
+function resolvePattern(ctx, scene, textureKey, fallbackColor) {
+  const source = getTextureSource(scene, textureKey);
+  if (source) {
+    const pattern = ctx.createPattern(source, "repeat");
+    if (pattern) {
+      return pattern;
+    }
+  }
+  return fallbackColor;
+}
+
+function createTrackBackdropCanvas(scene, track) {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = CANVAS_WIDTH;
+  canvas.height = CANVAS_HEIGHT;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return null;
+  }
+
+  const grassFill = resolvePattern(ctx, scene, TRACK_SURFACE_TILES.grass.key, "#264827");
+  const dirtFill = resolvePattern(ctx, scene, TRACK_SURFACE_TILES.dirt.key, "#8d6c45");
+  const asphaltFill = resolvePattern(ctx, scene, TRACK_SURFACE_TILES.asphalt.key, "#5c5d59");
+
+  ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+  ctx.fillStyle = grassFill;
+  ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  ctx.strokeStyle = dirtFill;
+  ctx.lineWidth = (track.outsideWidth + 16) * 2;
+  strokeClosedPolylineCanvas(ctx, track.points);
+
+  ctx.strokeStyle = dirtFill;
+  ctx.lineWidth = track.outsideWidth * 2;
+  strokeClosedPolylineCanvas(ctx, track.points);
+
+  ctx.strokeStyle = asphaltFill;
+  ctx.lineWidth = track.roadWidth * 2;
+  strokeClosedPolylineCanvas(ctx, track.points);
+
+  ctx.strokeStyle = "rgba(255, 245, 205, 0.78)";
+  ctx.lineWidth = 2.2;
+  drawDashedPolylineCanvas(ctx, track.points, 11, 11);
+
+  return canvas;
+}
+
+function strokeClosedPolylineCanvas(ctx, points) {
+  if (!points || !points.length) {
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i += 1) {
+    ctx.lineTo(points[i].x, points[i].y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+}
+
+function drawDashedPolylineCanvas(ctx, points, dash, gap) {
+  if (!points || points.length < 2) {
+    return;
+  }
+  ctx.setLineDash([dash, gap]);
+  strokeClosedPolylineCanvas(ctx, points);
+  ctx.setLineDash([]);
 }
 
 function strokeClosedPolyline(g, points) {
