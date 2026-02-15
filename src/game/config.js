@@ -9,6 +9,7 @@ export const CANVAS_WIDTH = 980;
 export const CANVAS_HEIGHT = 620;
 export const TAU = Math.PI * 2;
 export const RACE_TIMEOUT_MS = 120000;
+export const LAPS_TO_FINISH = 3;
 export const PICKUP_RESPAWN_MS = 8000;
 export const STORAGE_PREFIX = "snake_drift_best_";
 export const OFFROAD_EXTRA_SLOWDOWN = 0.78;
