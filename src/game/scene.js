@@ -144,7 +144,12 @@ export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle }
         const raceBeforeUpdate = state.race;
         if (!raceBeforeUpdate) {
           if (state.currentScreen === "race" && state.online?.active) {
-            renderOnlineSnapshot(this, state.online, time, renderIdle);
+            try {
+              renderOnlineSnapshot(this, state.online, time, renderIdle);
+            } catch (error) {
+              console.error("[online] render snapshot failed:", error);
+              renderIdle(this);
+            }
             return;
           }
           renderIdle(this);
@@ -155,7 +160,12 @@ export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle }
 
         const raceAfterUpdate = state.race;
         if (raceAfterUpdate) {
-          renderRace(this, raceAfterUpdate, time);
+          try {
+            renderRace(this, raceAfterUpdate, time);
+          } catch (error) {
+            console.error("[race] render failed:", error);
+            renderIdle(this);
+          }
         } else {
           renderIdle(this);
         }
@@ -339,16 +349,19 @@ function renderOnlineSnapshot(scene, onlineState, nowMs, renderIdle) {
 }
 
 function resolveOnlineTrack(trackId) {
-  const normalizedTrackId = normalizeTrackIdValue(trackId);
-  if (!normalizedTrackId) {
-    return null;
-  }
+  const defaultTrackId = normalizeTrackIdValue(TRACK_DEFS[0]?.id || "canyon_loop");
+  const normalizedTrackId = normalizeTrackIdValue(trackId) || defaultTrackId;
   const cached = ONLINE_TRACK_CACHE.get(normalizedTrackId);
   if (cached) {
     return cached;
   }
 
-  const trackDef = TRACK_DEF_BY_ID.get(normalizedTrackId) || TRACK_DEF_BY_NORMALIZED_ID.get(normalizedTrackId) || null;
+  const trackDef =
+    TRACK_DEF_BY_ID.get(normalizedTrackId) ||
+    TRACK_DEF_BY_NORMALIZED_ID.get(normalizedTrackId) ||
+    TRACK_DEF_BY_ID.get(defaultTrackId) ||
+    TRACK_DEF_BY_NORMALIZED_ID.get(defaultTrackId) ||
+    null;
   if (!trackDef) {
     return null;
   }

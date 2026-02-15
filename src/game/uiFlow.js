@@ -194,6 +194,12 @@ export function createUiFlowApi({
         selectedNow = selectedBefore;
       }
     }
+    if (!selectedNow && !manualRoomId && rooms.length > 0) {
+      selectedNow = String(rooms[0].roomId || "");
+      if (selectedNow) {
+        ui.onlineRoomSelect.value = selectedNow;
+      }
+    }
     if (!manualRoomId) {
       state.onlineRoomId = selectedNow;
     }
