@@ -9,6 +9,7 @@ export function createUiFlowApi({
   createRaceState,
   syncRaceMusic,
   startOnlineRace,
+  listOnlineRooms,
   disconnectOnlineRace,
   sendOnlineInput,
   showToast,
@@ -19,6 +20,7 @@ export function createUiFlowApi({
   const PLAYER_NAME_STORAGE_KEY = "polzunki_player_name_v1";
   const PLAYER_NAME_MAX_LENGTH = 24;
   const DEFAULT_PLAYER_NAME = "Player";
+  const ONLINE_ROOM_ID_MAX_LENGTH = 64;
 
   function normalizePlayerName(rawName) {
     return String(rawName ?? "")

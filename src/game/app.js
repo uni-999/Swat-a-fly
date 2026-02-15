@@ -70,6 +70,7 @@ export function bootstrapApp() {
   });
   const {
     startOnlineRace,
+    listOnlineRooms,
     disconnectOnlineRace,
     sendOnlineInput,
   } = createOnlineRoomClientApi({ state });
@@ -90,6 +91,7 @@ export function bootstrapApp() {
     createRaceState,
     syncRaceMusic: (...args) => syncRaceMusicRef(...args),
     startOnlineRace,
+    listOnlineRooms,
     disconnectOnlineRace,
     sendOnlineInput,
     showToast,

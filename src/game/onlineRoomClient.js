@@ -101,6 +101,11 @@ export function createOnlineRoomClientApi({ state } = {}) {
     }
   }
 
+  function normalizeRoomId(rawRoomId) {
+    const value = String(rawRoomId ?? "").trim();
+    return value.slice(0, 64);
+  }
+
   function clearOnlinePingTimer() {
     if (state.online?.pingTimerId) {
       clearInterval(state.online.pingTimerId);
@@ -140,6 +145,7 @@ export function createOnlineRoomClientApi({ state } = {}) {
     trackId,
     playerName = "Player",
     userId = null,
+    roomId = "",
   } = {}) {
     if (!trackId) {
       return { ok: false, error: "track_id_required" };
@@ -148,6 +154,7 @@ export function createOnlineRoomClientApi({ state } = {}) {
     await disconnectOnlineRace();
 
     const onlineUserId = userId || ensureOnlineUserId();
+    const requestedRoomId = normalizeRoomId(roomId);
     state.online = {
       active: true,
       status: "connecting",
@@ -176,11 +183,19 @@ export function createOnlineRoomClientApi({ state } = {}) {
       for (const candidate of endpointCandidates) {
         try {
           client = new colyseus.Client(candidate);
-          room = await client.joinOrCreate("race", {
-            trackId,
-            userId: onlineUserId,
-            name: playerName,
-          });
+          if (requestedRoomId) {
+            room = await client.joinById(requestedRoomId, {
+              trackId,
+              userId: onlineUserId,
+              name: playerName,
+            });
+          } else {
+            room = await client.joinOrCreate("race", {
+              trackId,
+              userId: onlineUserId,
+              name: playerName,
+            });
+          }
           endpoint = candidate;
           break;
         } catch (error) {
@@ -253,6 +268,64 @@ export function createOnlineRoomClientApi({ state } = {}) {
     }
   }
 
+  async function listOnlineRooms({ trackId = null } = {}) {
+    const resolvedTrackId = typeof trackId === "string" ? trackId.trim() : "";
+    try {
+      const colyseus = await loadColyseusClientModule();
+      const endpointCandidates = getMatchServerWsCandidates();
+      let lastError = null;
+
+      for (const endpoint of endpointCandidates) {
+        try {
+          const client = new colyseus.Client(endpoint);
+          if (typeof client.getAvailableRooms !== "function") {
+            throw new Error("room_listing_unsupported_by_client");
+          }
+          const rooms = await client.getAvailableRooms("race");
+          const normalized = (Array.isArray(rooms) ? rooms : [])
+            .map((room) => {
+              const metadata = room?.metadata && typeof room.metadata === "object" ? room.metadata : {};
+              const roomTrackId = typeof metadata.trackId === "string" ? metadata.trackId : null;
+              const clients = Number(room?.clients ?? room?.clientsCount ?? 0);
+              const maxClients = Number(room?.maxClients ?? 0);
+              return {
+                roomId: String(room?.roomId || ""),
+                trackId: roomTrackId,
+                phase: typeof metadata.phase === "string" ? metadata.phase : null,
+                clients: Number.isFinite(clients) ? clients : 0,
+                maxClients: Number.isFinite(maxClients) ? maxClients : 0,
+                locked: Boolean(room?.locked),
+              };
+            })
+            .filter((room) => room.roomId)
+            .filter((room) => {
+              if (!resolvedTrackId) {
+                return true;
+              }
+              return !room.trackId || room.trackId === resolvedTrackId;
+            })
+            .sort((a, b) => b.clients - a.clients || a.roomId.localeCompare(b.roomId));
+
+          return {
+            ok: true,
+            endpoint,
+            rooms: normalized,
+          };
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      throw lastError || new Error("match_server_unreachable");
+    } catch (error) {
+      return {
+        ok: false,
+        error: error?.message || String(error),
+        rooms: [],
+      };
+    }
+  }
+
   function sendOnlineInput(input) {
     const room = state.online?.room;
     if (!room || state.online?.status !== "connected") {
@@ -272,6 +345,7 @@ export function createOnlineRoomClientApi({ state } = {}) {
 
   return {
     startOnlineRace,
+    listOnlineRooms,
     disconnectOnlineRace,
     sendOnlineInput,
     ensureOnlineUserId,
