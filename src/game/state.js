@@ -1,4 +1,4 @@
-import { DEFAULT_OFFLINE_MODE, OFFLINE_MODES } from "./config.js";
+﻿import { DEFAULT_OFFLINE_MODE, OFFLINE_MODES } from "./config.js";
 
 // Shared DOM handles used across game modules.
 export const ui = {
@@ -90,7 +90,7 @@ export function updateOfflineModeUi() {
   }
   if (ui.modeNote) {
     ui.modeNote.textContent = classicActive
-      ? "Р РµР¶РёРј PRD: РІС‹ СѓРїСЂР°РІР»СЏРµС‚Рµ Р·РјРµРµР№, РѕСЃС‚Р°Р»СЊРЅС‹Рµ 3 - Р±РѕС‚С‹."
-      : "Р РµР¶РёРј РѕС‚Р»Р°РґРєРё: РІСЃРµ 4 Р·РјРµРё РЅР° Р°РІС‚РѕРїРёР»РѕС‚Рµ.";
+      ? "Режим классики: вы управляете змеёй, остальные 3 - боты."
+      : "Режим отладки: все 4 змеи на автопилоте.";
   }
 }
