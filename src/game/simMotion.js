@@ -94,7 +94,7 @@ function stepRacer(race, racer, control, nowMs, dt) {
   const turnRate = racer.stats.turnRate * modifiers.turnMul * (1 - speedRatio * 0.35);
   racer.heading = wrapAngle(racer.heading + turnInput * turnRate * dt);
 
-  if (outsideNow && projection) {
+  if (outsideNow && projection && !racer.isPlayer) {
     const toTrackHeading = Math.atan2(projection.y - racer.y, projection.x - racer.x);
     const recoverTurn = clamp(shortestAngle(racer.heading, toTrackHeading), -1, 1);
     racer.heading = wrapAngle(racer.heading + recoverTurn * OUTSIDE_RECOVERY_STEER_GAIN * dt);

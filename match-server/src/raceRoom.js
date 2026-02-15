@@ -126,7 +126,7 @@ export class RaceRoom extends Room {
   // -----------------------------
   handleInput(client, payload) {
     const player = this.players.get(client.sessionId);
-    if (!player || player.isBot || this.phase !== "running") {
+    if (!player || player.isBot || this.phase === "finished") {
       return;
     }
 

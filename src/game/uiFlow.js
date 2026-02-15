@@ -21,6 +21,11 @@ export function createUiFlowApi({
   const PLAYER_NAME_MAX_LENGTH = 24;
   const DEFAULT_PLAYER_NAME = "Player";
   const ONLINE_ROOM_ID_MAX_LENGTH = 64;
+  const ONLINE_INPUT_PUSH_INTERVAL_MS = 50;
+  const ONLINE_INPUT_KEEPALIVE_MS = 220;
+  let onlineInputPumpId = null;
+  let lastOnlineInputSignature = "";
+  let lastOnlineInputSentAtMs = 0;
 
   function normalizePlayerName(rawName) {
     return String(rawName ?? "")
@@ -289,6 +294,12 @@ export function createUiFlowApi({
         state.phaserGame.scale.refresh();
       }
     });
+
+    if (!onlineInputPumpId) {
+      onlineInputPumpId = window.setInterval(() => {
+        pushOnlineInput(false);
+      }, ONLINE_INPUT_PUSH_INTERVAL_MS);
+    }
   }
 
   function onKeyDown(event) {
@@ -299,7 +310,7 @@ export function createUiFlowApi({
     state.keyMap.add(event.code);
     const isRestartKey = event.code === "KeyR" || event.key === "r" || event.key === "R";
     const restartTrackId = state.race?.trackDef?.id || state.selectedTrackId || state.online?.trackId;
-    pushOnlineInput();
+    pushOnlineInput(true);
 
     if (isRestartKey && state.currentScreen === "race" && restartTrackId) {
       event.preventDefault();
@@ -313,7 +324,7 @@ export function createUiFlowApi({
 
   function onKeyUp(event) {
     state.keyMap.delete(event.code);
-    pushOnlineInput();
+    pushOnlineInput(true);
   }
 
   function showScreen(name) {
@@ -438,11 +449,28 @@ export function createUiFlowApi({
     };
   }
 
-  function pushOnlineInput() {
+  function pushOnlineInput(force = false) {
     if (state.playMode !== "online" || state.currentScreen !== "race") {
+      lastOnlineInputSignature = "";
       return;
     }
-    sendOnlineInput?.(buildOnlineInputFromKeys());
+
+    const payload = buildOnlineInputFromKeys();
+    const signature = `${payload.turn}|${payload.throttle}|${payload.brake}`;
+    const nowMs = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const shouldSend =
+      force ||
+      signature !== lastOnlineInputSignature ||
+      nowMs - lastOnlineInputSentAtMs >= ONLINE_INPUT_KEEPALIVE_MS;
+    if (!shouldSend) {
+      return;
+    }
+
+    const sent = sendOnlineInput?.(payload);
+    if (sent) {
+      lastOnlineInputSignature = signature;
+      lastOnlineInputSentAtMs = nowMs;
+    }
   }
 
   function getNextTrackDef(currentTrackId) {
@@ -511,7 +539,7 @@ export function createUiFlowApi({
       syncRaceMusic();
       const endpointLabel = connectResult.endpoint ? ` (${connectResult.endpoint})` : "";
       showToast(`Онлайн: подключено к комнате ${connectResult.roomId || "-"}${endpointLabel}.`);
-      pushOnlineInput();
+      pushOnlineInput(true);
       return true;
     }
 

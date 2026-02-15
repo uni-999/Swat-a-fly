@@ -79,6 +79,25 @@ function preventRacerStall(race, racer, nowMs, dt) {
     return;
   }
 
+  if (racer.isPlayer) {
+    // For human players anti-stall should not hijack steering: only enforce crawl speed and grace window.
+    const forcedSpeed = shouldNeverStop(racer)
+      ? Math.max(ALWAYS_MOVE_MIN_SPEED * (hardDeadlock ? 1.24 : 1.08), racer.stats.maxSpeed * (hardDeadlock ? 0.3 : 0.22))
+      : Math.max(16, racer.stats.maxSpeed * (hardDeadlock ? 0.22 : 0.14));
+    racer.speed = Math.max(racer.speed, forcedSpeed);
+    const ghostMs = hardDeadlock ? STALL_HARD_UNSTUCK_GHOST_MS : STALL_UNSTUCK_GHOST_MS;
+    racer.nextBodyCrossEffectAtMs = nowMs + ghostMs;
+    racer.impactUntilMs = nowMs + ghostMs;
+    racer.unstuckUntilMs = nowMs + ghostMs;
+
+    watch.x = racer.x;
+    watch.y = racer.y;
+    watch.progressT = projection.tNorm;
+    watch.lastMoveAtMs = nowMs;
+    watch.lastUnstuckAtMs = nowMs;
+    return;
+  }
+
   const lookAhead = hardDeadlock ? STALL_HARD_UNSTUCK_LOOKAHEAD : STALL_UNSTUCK_LOOKAHEAD;
   const ahead = sampleTrack(race.track, mod1(projection.tNorm + lookAhead));
   const normal = { x: -ahead.tangent.y, y: ahead.tangent.x };

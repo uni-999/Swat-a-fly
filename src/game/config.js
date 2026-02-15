@@ -4,7 +4,7 @@ export const OFFLINE_MODES = {
   CLASSIC: "classic_1p_3npc",
   DEBUG: "debug_4npc",
 };
-export const DEFAULT_OFFLINE_MODE = OFFLINE_MODES.DEBUG;
+export const DEFAULT_OFFLINE_MODE = OFFLINE_MODES.CLASSIC;
 export const CANVAS_WIDTH = 980;
 export const CANVAS_HEIGHT = 620;
 export const TAU = Math.PI * 2;
