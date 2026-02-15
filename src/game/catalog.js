@@ -6,6 +6,15 @@ export const BODY_ITEMS = {
   CACTUS: { color: "#4fd17b", deltaSegments: -1 },
 };
 export const SNAKE_SPRITES_BASE_PATH = "assets/sprites/snakes";
+export const ITEM_SPRITES_BASE_PATH = "assets/sprites/items";
+export const ITEM_SPRITES = {
+  BOOST: { key: "item_boost", path: `${ITEM_SPRITES_BASE_PATH}/boost.png` },
+  SHIELD: { key: "item_shield", path: `${ITEM_SPRITES_BASE_PATH}/shield.png` },
+  OIL: { key: "item_oil", path: `${ITEM_SPRITES_BASE_PATH}/oil.png` },
+  BOMB: { key: "item_bomb", path: `${ITEM_SPRITES_BASE_PATH}/bomb.png` },
+  APPLE: { key: "item_apple", path: `${ITEM_SPRITES_BASE_PATH}/apple.png` },
+  CACTUS: { key: "item_cactus", path: `${ITEM_SPRITES_BASE_PATH}/cactus.png` },
+};
 
 export const SNAKES = [
   {

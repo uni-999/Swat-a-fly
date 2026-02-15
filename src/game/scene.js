@@ -14,6 +14,7 @@ import {
   snakeSegmentTextureKey,
   snakeHeadTexturePath,
   snakeSegmentTexturePath,
+  ITEM_SPRITES,
 } from "./catalog.js";
 import { buildTrackRuntime, sampleTrack } from "./trackMath.js";
 import { drawBackground, drawRaceWorld, ensureTrackBackdrop } from "./renderWorld.js";
@@ -49,8 +50,11 @@ export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle }
         this.infoText = null;
         this.labelMap = new Map();
         this.spriteSupportMap = new Map();
+        this.itemSpriteSupportMap = new Map();
         this.headSpriteMap = new Map();
         this.segmentSpriteMap = new Map();
+        this.bodyItemSpriteMap = new Map();
+        this.pickupSpriteMap = new Map();
         this.trackMusicMap = new Map();
         this.onlineTrailMap = new Map();
         this.onlinePoseMap = new Map();
@@ -61,6 +65,12 @@ export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle }
         for (const snake of SNAKES) {
           this.load.image(snakeHeadTextureKey(snake.id), snakeHeadTexturePath(snake.id));
           this.load.image(snakeSegmentTextureKey(snake.id), snakeSegmentTexturePath(snake.id));
+        }
+        for (const spriteCfg of Object.values(ITEM_SPRITES)) {
+          if (!spriteCfg?.key || !spriteCfg?.path) {
+            continue;
+          }
+          this.load.image(spriteCfg.key, spriteCfg.path);
         }
         for (const musicCfg of Object.values(TRACK_MUSIC)) {
           this.load.audio(musicCfg.key, musicCfg.path);
@@ -98,6 +108,9 @@ export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle }
             head: this.textures.exists(snakeHeadTextureKey(snake.id)),
             segment: this.textures.exists(snakeSegmentTextureKey(snake.id)),
           });
+        }
+        for (const [itemType, spriteCfg] of Object.entries(ITEM_SPRITES)) {
+          this.itemSpriteSupportMap.set(itemType, Boolean(spriteCfg?.key && this.textures.exists(spriteCfg.key)));
         }
 
         for (const [trackId, musicCfg] of Object.entries(TRACK_MUSIC)) {

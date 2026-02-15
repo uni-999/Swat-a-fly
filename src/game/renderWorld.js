@@ -1,6 +1,11 @@
 import { CANVAS_WIDTH, CANVAS_HEIGHT, TRACK_BACKDROP_IMAGES, TRACK_SURFACE_TILES } from "./config.js";
-import { BODY_ITEMS, PICKUP_TYPES } from "./catalog.js";
+import { BODY_ITEMS, PICKUP_TYPES, ITEM_SPRITES } from "./catalog.js";
 import { hexToInt } from "./utils.js";
+
+const PICKUP_SPRITE_DEPTH = 12;
+const BODY_ITEM_SPRITE_DEPTH = 13;
+const PICKUP_SPRITE_SIZE_MUL = 2.1;
+const BODY_ITEM_SPRITE_SIZE_MUL = 2.35;
 
 export function drawBackground(g, options = {}) {
   const skipBase = Boolean(options.skipBase);
@@ -19,15 +24,16 @@ export function drawBackground(g, options = {}) {
   g.fillEllipse(CANVAS_WIDTH * 0.45, CANVAS_HEIGHT * 0.46, 300, 170);
 }
 
-export function drawRaceWorld(g, race, options = {}) {
+export function drawRaceWorld(scene, g, race, options = {}) {
   const skipTrack = Boolean(options.skipTrack);
   if (!skipTrack) {
     drawTrack(g, race.track);
   }
   drawCheckpoints(g, race.track);
-  drawBodyItems(g, race.bodyItems);
-  drawPickups(g, race.pickups);
+  drawBodyItems(scene, g, race.bodyItems);
+  drawPickups(scene, g, race.pickups);
   drawVenomShots(g, race.venomShots || []);
+  syncTrackObjectSprites(scene, race, true);
 }
 
 export function ensureTrackBackdrop(scene, race) {
@@ -253,9 +259,12 @@ function drawCheckpoints(g, track) {
   }
 }
 
-function drawBodyItems(g, bodyItems) {
+function drawBodyItems(scene, g, bodyItems) {
   for (const item of bodyItems) {
     if (!item.active) {
+      continue;
+    }
+    if (supportsItemSprite(scene, item.type)) {
       continue;
     }
     if (item.type === "APPLE") {
@@ -290,9 +299,12 @@ function drawCactus(g, x, y, radius) {
   g.lineBetween(x + radius * 0.12, y - h * 0.45, x + radius * 0.12, y + h * 0.43);
 }
 
-function drawPickups(g, pickups) {
+function drawPickups(scene, g, pickups) {
   for (const pickup of pickups) {
     if (!pickup.active) {
+      continue;
+    }
+    if (supportsItemSprite(scene, pickup.type)) {
       continue;
     }
     const color = hexToInt(PICKUP_TYPES[pickup.type].color);
@@ -308,6 +320,96 @@ function drawPickups(g, pickups) {
       true
     );
   }
+}
+
+export function syncTrackObjectSprites(scene, race, visible = true) {
+  if (!scene) {
+    return;
+  }
+
+  const bodyItemSpriteMap = ensureObjectSpriteMap(scene, "bodyItemSpriteMap");
+  const pickupSpriteMap = ensureObjectSpriteMap(scene, "pickupSpriteMap");
+
+  if (!visible || !race) {
+    hideObjectSpriteMap(bodyItemSpriteMap);
+    hideObjectSpriteMap(pickupSpriteMap);
+    return;
+  }
+
+  syncObjectSpriteMap(scene, bodyItemSpriteMap, race.bodyItems || [], {
+    depth: BODY_ITEM_SPRITE_DEPTH,
+    sizeMul: BODY_ITEM_SPRITE_SIZE_MUL,
+  });
+  syncObjectSpriteMap(scene, pickupSpriteMap, race.pickups || [], {
+    depth: PICKUP_SPRITE_DEPTH,
+    sizeMul: PICKUP_SPRITE_SIZE_MUL,
+  });
+}
+
+function supportsItemSprite(scene, itemType) {
+  const support = scene?.itemSpriteSupportMap?.get(itemType);
+  if (typeof support === "boolean") {
+    return support;
+  }
+  const key = ITEM_SPRITES[itemType]?.key;
+  return Boolean(key && scene?.textures?.exists(key));
+}
+
+function ensureObjectSpriteMap(scene, key) {
+  if (!(scene[key] instanceof Map)) {
+    scene[key] = new Map();
+  }
+  return scene[key];
+}
+
+function hideObjectSpriteMap(spriteMap) {
+  if (!(spriteMap instanceof Map)) {
+    return;
+  }
+  spriteMap.forEach((sprite) => sprite.setVisible(false));
+}
+
+function syncObjectSpriteMap(scene, spriteMap, objects, options) {
+  const live = new Set();
+  const depth = options.depth;
+  const sizeMul = options.sizeMul;
+
+  for (const object of objects) {
+    live.add(object.id);
+    const spriteCfg = ITEM_SPRITES[object.type];
+    const spriteKey = spriteCfg?.key;
+    const canUseSprite = object.active && supportsItemSprite(scene, object.type) && Boolean(spriteKey);
+
+    let sprite = spriteMap.get(object.id);
+    if (!canUseSprite) {
+      if (sprite) {
+        sprite.setVisible(false);
+      }
+      continue;
+    }
+
+    if (!sprite) {
+      sprite = scene.add.image(0, 0, spriteKey).setOrigin(0.5, 0.5).setDepth(depth);
+      spriteMap.set(object.id, sprite);
+    } else if (sprite.texture.key !== spriteKey) {
+      sprite.setTexture(spriteKey);
+    }
+
+    const radius = Number.isFinite(object.radius) ? object.radius : 10;
+    const size = Math.max(16, radius * sizeMul);
+    sprite.setVisible(true);
+    sprite.setPosition(object.x, object.y);
+    sprite.setDisplaySize(size, size);
+    sprite.setDepth(depth);
+    sprite.setAlpha(1);
+    sprite.setRotation(0);
+  }
+
+  spriteMap.forEach((sprite, objectId) => {
+    if (!live.has(objectId)) {
+      sprite.setVisible(false);
+    }
+  });
 }
 
 function drawVenomShots(g, venomShots) {
