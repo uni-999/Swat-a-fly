@@ -2,6 +2,9 @@ import { Room } from "@colyseus/core";
 
 const TRACK_LENGTH = 12000;
 const COUNTDOWN_MS = 3000;
+const STEER_RESPONSE_PER_SEC = 8.5;
+const BASE_TURN_RATE = 2.15;
+const TURN_RATE_SPEED_LOSS = 0.85;
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -57,6 +60,7 @@ export class RaceRoom extends Room {
       x: 0,
       y: 0,
       heading: 0,
+      steer: 0,
       speed: 0,
       progress: 0,
       finished: false,
@@ -173,12 +177,16 @@ export class RaceRoom extends Room {
       const drag = 1.15;
       const throttleInput = clamp(safeNumber(input?.throttle, 0), 0, 1);
       const brakeInput = clamp(safeNumber(input?.brake, 0), 0, 1);
+      const targetTurn = clamp(safeNumber(input?.turn, 0), -1, 1);
 
       player.speed += (throttleInput * accel - brakeInput * brakeForce - drag * player.speed) * dt;
       player.speed = clamp(player.speed, 0, maxSpeed);
 
-      const turnRate = 2.9 - (player.speed / maxSpeed) * 1.2;
-      player.heading += clamp(safeNumber(input?.turn, 0), -1, 1) * turnRate * dt;
+      const steerBlend = Math.min(1, dt * STEER_RESPONSE_PER_SEC);
+      player.steer += (targetTurn - player.steer) * steerBlend;
+
+      const turnRate = BASE_TURN_RATE - (player.speed / maxSpeed) * TURN_RATE_SPEED_LOSS;
+      player.heading += player.steer * turnRate * dt;
       player.x += Math.cos(player.heading) * player.speed * dt;
       player.y += Math.sin(player.heading) * player.speed * dt;
       player.progress += player.speed * dt;

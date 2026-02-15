@@ -365,21 +365,23 @@ function getOnlinePlayerPose(scene, player, playerIndex, onlineTrack) {
     const lapFraction = lapFractionRaw - Math.floor(lapFractionRaw);
     const sample = sampleTrack(onlineTrack.runtime, lapFraction);
     const normal = { x: -sample.tangent.y, y: sample.tangent.x };
+    const serverHeading = Number(player?.heading);
+    const heading = Number.isFinite(serverHeading)
+      ? serverHeading
+      : Math.atan2(sample.tangent.y, sample.tangent.x);
     const baseLaneOffset = ONLINE_LANE_OFFSETS[Math.abs(playerIndex) % ONLINE_LANE_OFFSETS.length];
     const sessionKey = String(player?.sessionId || player?.userId || player?.displayName || `p_${playerIndex}`);
     const laneOffset = resolveOnlineLaneOffset(
       scene,
       sessionKey,
-      Number(player?.heading),
+      heading,
       onlineTrack.runtime.roadWidth,
       baseLaneOffset
     );
-    const tangentHeading = Math.atan2(sample.tangent.y, sample.tangent.x);
-    const headingTilt = Math.max(-0.35, Math.min(0.35, (laneOffset - baseLaneOffset) / Math.max(40, onlineTrack.runtime.roadWidth)));
     return {
       x: sample.x + normal.x * laneOffset,
       y: sample.y + normal.y * laneOffset,
-      heading: tangentHeading + headingTilt,
+      heading,
     };
   }
 
