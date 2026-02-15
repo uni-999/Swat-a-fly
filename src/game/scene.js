@@ -248,7 +248,7 @@ function renderOnlineSnapshot(scene, onlineState, nowMs, renderIdle) {
   const g = scene.graphics;
   const snapshot = onlineState?.snapshot || null;
   const status = onlineState?.status || "idle";
-  const trackId = snapshot?.trackId || onlineState?.trackId || null;
+  const trackId = snapshot?.trackId || onlineState?.trackId || "canyon_loop";
   const onlineTrack = resolveOnlineTrack(trackId);
 
   if (onlineTrack) {
@@ -361,8 +361,7 @@ function getOnlinePlayerPose(player, playerIndex, onlineTrack) {
     const lapFraction = lapFractionRaw - Math.floor(lapFractionRaw);
     const sample = sampleTrack(onlineTrack.runtime, lapFraction);
     const normal = { x: -sample.tangent.y, y: sample.tangent.x };
-    const laneSeed = hashString(player?.sessionId || player?.userId || player?.displayName || `${playerIndex}`);
-    const laneOffset = ONLINE_LANE_OFFSETS[Math.abs(laneSeed) % ONLINE_LANE_OFFSETS.length];
+    const laneOffset = ONLINE_LANE_OFFSETS[Math.abs(playerIndex) % ONLINE_LANE_OFFSETS.length];
     return {
       x: sample.x + normal.x * laneOffset,
       y: sample.y + normal.y * laneOffset,

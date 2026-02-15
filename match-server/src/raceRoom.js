@@ -52,7 +52,7 @@ export class RaceRoom extends Room {
       displayName,
       connected: true,
       isBot: false,
-      ready: false,
+      ready: true,
       input: { turn: 0, throttle: 0, brake: 0 },
       x: 0,
       y: 0,
@@ -121,7 +121,7 @@ export class RaceRoom extends Room {
     }
 
     const participants = Array.from(this.players.values()).filter((p) => p.connected);
-    if (participants.length < 2) {
+    if (participants.length < 1) {
       return;
     }
 
@@ -171,12 +171,16 @@ export class RaceRoom extends Room {
       const accel = 280;
       const brakeForce = 380;
       const drag = 1.15;
+      const throttleInput = clamp(safeNumber(input?.throttle, 0), 0, 1);
+      const brakeInput = clamp(safeNumber(input?.brake, 0), 0, 1);
+      const autoThrottle = player.isBot ? 0.88 : 0.72;
+      const throttle = Math.max(throttleInput, autoThrottle);
 
-      player.speed += (input.throttle * accel - input.brake * brakeForce - drag * player.speed) * dt;
+      player.speed += (throttle * accel - brakeInput * brakeForce - drag * player.speed) * dt;
       player.speed = clamp(player.speed, 0, maxSpeed);
 
       const turnRate = 2.9 - (player.speed / maxSpeed) * 1.2;
-      player.heading += input.turn * turnRate * dt;
+      player.heading += clamp(safeNumber(input?.turn, 0), -1, 1) * turnRate * dt;
       player.x += Math.cos(player.heading) * player.speed * dt;
       player.y += Math.sin(player.heading) * player.speed * dt;
       player.progress += player.speed * dt;
