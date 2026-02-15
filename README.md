@@ -278,3 +278,4 @@ npx serve . -l 5500
 - 2026-02: Refactor step-16: split rendering into `src/game/renderWorld.js` (track/background/world objects) and `src/game/renderRacers.js` (snakes, sprites, labels); `src/game/render.js` now orchestrates these modules.
 - 2026-02: Refactor step-17: split race simulation internals into `src/game/simMotion.js` (movement/coasting step) and `src/game/simInteractions.js` (body crossing, anti-stall, collisions); `src/game/simulation.js` is now a thin re-export facade.
 - 2026-02: Refactor step-18: split body/effects internals into `src/game/simBodyCore.js` (segments/heading/speed modifiers) and `src/game/simItemEffects.js` (hunger, pickups, effects); `src/game/simBodySystem.js` is now a thin re-export facade.
+- 2026-02: Refactor step-19: split NPC steering internals into `src/game/aiTargeting.js` (apple attraction/targeting) and `src/game/aiAvoidance.js` (hazard/edge avoidance); `src/game/aiSteering.js` now focuses on final control synthesis.

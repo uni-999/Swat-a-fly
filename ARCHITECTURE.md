@@ -62,7 +62,9 @@ Gameplay modules:
 - `src/game/simBodyCore.js`: body segments, heading alignment, speed floors and effect multipliers.
 - `src/game/simItemEffects.js`: hunger ticks, pickups/body-items, effect application/removal.
 - `src/game/simProgress.js`: checkpoint progress and standings.
-- `src/game/aiSteering.js`: bot pathing/targets/avoidance and NPC control output.
+- `src/game/aiTargeting.js`: apple attraction and target blending.
+- `src/game/aiAvoidance.js`: hazard/edge avoidance vectors and safe target shift.
+- `src/game/aiSteering.js`: steering decision assembly (throttle/brake/turn) using targeting + avoidance.
 - `src/game/venomSystem.js`: venom targeting, projectile lifecycle and hit effects.
 - `src/game/ai.js`: thin AI facade composing steering + venom systems.
 - `src/game/raceFlow.js`: countdown/race loop/finish/results orchestration.
@@ -87,3 +89,4 @@ Support modules:
 - 2026-02 step-16: render split into src/game/renderWorld.js and src/game/renderRacers.js; src/game/render.js now orchestrates them.
 - 2026-02 step-17: simulation internals split into src/game/simMotion.js and src/game/simInteractions.js; src/game/simulation.js became a re-export facade.
 - 2026-02 step-18: body/effects internals split into src/game/simBodyCore.js and src/game/simItemEffects.js; src/game/simBodySystem.js became a re-export facade.
+- 2026-02 step-19: aiSteering internals split into src/game/aiTargeting.js and src/game/aiAvoidance.js; src/game/aiSteering.js now focuses on final control synthesis.
