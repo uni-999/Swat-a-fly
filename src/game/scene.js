@@ -83,6 +83,11 @@ export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle }
           this.menuMusic = this.sound.add(MENU_MUSIC.key, { volume: MENU_MUSIC.volume });
           this.menuMusic.setLoop(true);
         }
+        if (this.sound?.locked) {
+          this.sound.once("unlocked", () => {
+            syncRaceMusic();
+          });
+        }
 
         applyBackgroundRunPolicy(this.game);
         state.raceScene = this;
@@ -168,6 +173,9 @@ export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle }
     if (!scene) {
       return;
     }
+    if (scene.sound?.locked) {
+      return;
+    }
     const activeTrackId =
       state.currentScreen === "race"
         ? state.race?.trackDef?.id || (state.online?.active ? state.online?.trackId : null) || null
@@ -231,11 +239,11 @@ function renderOnlineSnapshot(scene, onlineState, nowMs, renderIdle) {
   if (!snapshot) {
     scene.infoText.setVisible(true);
     scene.infoText.setText([
-      `Онлайн: ${status}`,
-      onlineState?.roomId ? `Комната: ${onlineState.roomId}` : "Подключение к комнате...",
+      `Online: ${status}`,
+      onlineState?.roomId ? `Room: ${onlineState.roomId}` : "Connecting to room...",
       onlineState?.endpoint ? `Endpoint: ${onlineState.endpoint}` : "Endpoint: -",
       Number.isFinite(onlineState?.latencyMs) ? `RTT: ${Math.round(onlineState.latencyMs)} ms` : "RTT: -",
-      `Время: ${Math.round(nowMs)} ms`,
+      `Time: ${Math.round(nowMs)} ms`,
     ]);
     return;
   }
@@ -263,15 +271,20 @@ function renderOnlineSnapshot(scene, onlineState, nowMs, renderIdle) {
 
   const topRows = players.slice(0, 4).map((player, idx) => {
     const progress = Math.round(Number(player.progress) || 0);
-    return `${idx + 1}. ${player.displayName}: ${progress}м${player.finished ? " ✓" : ""}`;
+    return `${idx + 1}. ${player.displayName}: ${progress}m${player.finished ? " ✓" : ""}`;
   });
   const phase = snapshot.phase || status;
   const latencyLine = Number.isFinite(onlineState?.latencyMs) ? `RTT: ${Math.round(onlineState.latencyMs)} ms` : "RTT: -";
+  const connectedPlayers = players.filter((player) => player.connected).length;
+  const readyPlayers = players.filter((player) => player.connected && player.ready).length;
+  const lobbyHint = phase === "lobby" ? `Lobby: ${readyPlayers}/${Math.max(2, connectedPlayers)} ready (need 2 players)` : null;
+
   scene.infoText.setVisible(true);
   scene.infoText.setText([
-    `Онлайн комната: ${snapshot.roomId || onlineState?.roomId || "-"}`,
-    `Фаза: ${phase} | ${latencyLine}`,
+    `Online room: ${snapshot.roomId || onlineState?.roomId || "-"}`,
+    `Phase: ${phase} | ${latencyLine}`,
     onlineState?.endpoint ? `Endpoint: ${onlineState.endpoint}` : "Endpoint: -",
+    ...(lobbyHint ? [lobbyHint] : []),
     ...topRows,
   ]);
 }
