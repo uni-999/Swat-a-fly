@@ -89,6 +89,56 @@ export function createUiFlowApi({
       .slice(0, ONLINE_ROOM_ID_MAX_LENGTH);
   }
 
+  function ensureOnlineRoomPickerDom() {
+    if (ui.onlineRoomPicker && ui.onlineRoomSelect && ui.onlineRoomRefresh && ui.onlineRoomIdInput) {
+      return;
+    }
+    const trackPanel = document.querySelector("#screen-track .panel");
+    const trackCards = ui.trackCards || document.getElementById("track-cards");
+    if (!trackPanel || !trackCards) {
+      return;
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.id = "online-room-picker";
+    wrapper.className = "online-room-picker";
+    wrapper.hidden = true;
+    wrapper.innerHTML = `
+      <label class="menu-field" for="online-room-select">
+        <span>Комната (онлайн)</span>
+        <select id="online-room-select">
+          <option value="">Авто: подключиться или создать</option>
+        </select>
+      </label>
+      <div class="online-room-actions">
+        <input
+          id="online-room-id-input"
+          type="text"
+          maxlength="64"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Или введите ID комнаты вручную"
+        >
+        <button id="online-room-refresh" class="btn ghost" type="button">Обновить список</button>
+      </div>
+    `;
+    trackPanel.insertBefore(wrapper, trackCards);
+
+    ui.onlineRoomPicker = wrapper;
+    ui.onlineRoomSelect = wrapper.querySelector("#online-room-select");
+    ui.onlineRoomRefresh = wrapper.querySelector("#online-room-refresh");
+    ui.onlineRoomIdInput = wrapper.querySelector("#online-room-id-input");
+    if (!ui.onlineRoomSelect) {
+      ui.onlineRoomSelect = document.getElementById("online-room-select");
+    }
+    if (!ui.onlineRoomRefresh) {
+      ui.onlineRoomRefresh = document.getElementById("online-room-refresh");
+    }
+    if (!ui.onlineRoomIdInput) {
+      ui.onlineRoomIdInput = document.getElementById("online-room-id-input");
+    }
+  }
+
   function syncOnlineRoomPickerVisibility() {
     if (!ui.onlineRoomPicker) {
       return;
@@ -183,6 +233,7 @@ export function createUiFlowApi({
   }
 
   function initOnlineRoomUi() {
+    ensureOnlineRoomPickerDom();
     renderOnlineRoomOptions();
     syncOnlineRoomPickerVisibility();
 

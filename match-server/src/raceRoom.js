@@ -2,7 +2,7 @@ import { Room } from "@colyseus/core";
 
 const TRACK_LENGTH = 12000;
 const COUNTDOWN_MS = 3000;
-const STEER_RESPONSE_PER_SEC = 12.0;
+const STEER_RESPONSE_PER_SEC = 30.0;
 const BASE_TURN_RATE = 2.9;
 const TURN_RATE_SPEED_LOSS = 1.15;
 const GRID_OFFSETS = [-18, -6, 6, 18];
@@ -209,8 +209,13 @@ export class RaceRoom extends Room {
       player.speed += (throttleInput * accel - brakeInput * brakeForce - drag * player.speed) * dt;
       player.speed = clamp(player.speed, 0, maxSpeed);
 
-      const steerBlend = Math.min(1, dt * STEER_RESPONSE_PER_SEC);
-      player.steer += (targetTurn - player.steer) * steerBlend;
+      if (player.isBot) {
+        const steerBlend = Math.min(1, dt * STEER_RESPONSE_PER_SEC);
+        player.steer += (targetTurn - player.steer) * steerBlend;
+      } else {
+        // Human control should feel immediate (same principle as offline direct turn input).
+        player.steer = targetTurn;
+      }
 
       const turnRate = BASE_TURN_RATE - (player.speed / maxSpeed) * TURN_RATE_SPEED_LOSS;
       player.heading += player.steer * turnRate * dt;

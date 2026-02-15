@@ -18,7 +18,7 @@ services:
     container_name: snake-match-server
     environment:
       PORT: "2567"
-      SERVER_TICK_RATE: "20"
+      SERVER_TICK_RATE: "60"
       RACE_MAX_MS: "180000"
       NAKAMA_URL: "${NAKAMA_URL:-}"
       NAKAMA_HTTP_KEY: "${NAKAMA_HTTP_KEY:-dev-http-key}"
