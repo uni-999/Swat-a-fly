@@ -324,3 +324,4 @@ npx serve . -l 5500
 - 2026-02: Online room UX tweak: when room list is non-empty and no manual room ID is set, first room is auto-selected in dropdown (`src/game/uiFlow.js`).
 - 2026-02: Online render safety fix: race scene now guards online/offline render passes with try/catch and falls back to default track id if snapshot track id is malformed (`src/game/scene.js`).
 - 2026-02: Bootstrap resilience fix: app startup now ensures Phaser is loaded with fallback URLs (`/assets/vendor/phaser.min.js`, jsDelivr, unpkg); if primary CDN fails, race canvas still initializes (`script.js`).
+- 2026-02: Online render hotfix: fixed `drawRaceWorld` call argument order in `renderOnlineSnapshot` (`src/game/scene.js`), which previously caused runtime exception and empty race canvas with only HUD visible.

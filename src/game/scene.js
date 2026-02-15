@@ -295,7 +295,7 @@ function renderOnlineSnapshot(scene, onlineState, nowMs, renderIdle) {
   if (onlineTrack) {
     const hasTrackBackdrop = ensureTrackBackdrop(scene, onlineTrack.raceView);
     drawBackground(g, { skipBase: hasTrackBackdrop });
-    drawRaceWorld(g, onlineTrack.raceView, { skipTrack: hasTrackBackdrop });
+    drawRaceWorld(scene, g, onlineTrack.raceView, { skipTrack: hasTrackBackdrop });
   } else {
     renderIdle(scene);
   }
