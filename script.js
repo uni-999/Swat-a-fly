@@ -1,346 +1,136 @@
-"use strict";
-
-// -----------------------------
-// Game Constants and Parameters
-// -----------------------------
-const TOTAL_RACERS = 4;
-const OFFLINE_MODES = {
-  CLASSIC: "classic_1p_3npc",
-  DEBUG: "debug_4npc",
-};
-const DEFAULT_OFFLINE_MODE = OFFLINE_MODES.DEBUG;
-const CANVAS_WIDTH = 980;
-const CANVAS_HEIGHT = 620;
-const TAU = Math.PI * 2;
-const RACE_TIMEOUT_MS = 120000;
-const PICKUP_RESPAWN_MS = 8000;
-const STORAGE_PREFIX = "snake_drift_best_";
-const OFFROAD_EXTRA_SLOWDOWN = 0.84;
-const MAX_HISTORY_POINTS = 320;
-const BODY_ITEM_COUNT = 12;
-const BODY_ITEM_RESPAWN_MS = 3600;
-const START_BODY_SEGMENTS = 8;
-const MIN_BODY_SEGMENTS = 1;
-const MAX_BODY_SEGMENTS = 56;
-const STARVATION_DECAY_INTERVAL_MS = 12000;
-const STARVATION_DECAY_SEGMENTS = 1;
-const APPLE_BOOST_DURATION_MS = 680;
-const APPLE_BOOST_SPEED_MUL = 1.48;
-const APPLE_BOOST_ACCEL_MUL = 1.34;
-const APPLE_BOOST_INSTANT_SPEED_FACTOR = 0.44;
-const EXHAUSTION_CRAWL_THRESHOLD = 3;
-const EXHAUSTION_CRAWL_SPEED_FACTOR = 0.36;
-const EXHAUSTION_SLOWDOWN_PER_STEP = 0.17;
-const EXHAUSTION_SLOWDOWN_MIN_FACTOR = 0.32;
-const CRITICAL_SEGMENTS_THRESHOLD = 4;
-const CRITICAL_SEGMENTS_SLOWDOWN = 0.55;
-const BODY_ITEM_MIN_SEPARATION = 64;
-const BODY_ITEM_TO_CHECKPOINT_MIN_DIST = 62;
-const BODY_ITEM_TO_START_CHECKPOINT_MIN_DIST = 150;
-const BODY_ITEM_TO_PICKUP_MIN_DIST = 40;
-const CROSS_ACCEL_SNAKE_ID = "handler";
-const BODY_CROSS_SLOWDOWN_MUL = 0.9;
-const SPEEDSTER_BODY_BLOCK_PUSH = 8;
-const BULLY_PUSH_DISTANCE = 8;
-const SEGMENT_RENDER_SCALE = 1.5;
-const RESTART_DEBOUNCE_MS = 320;
-const APPLE_STARTLINE_AVOID_RADIUS = 140;
-const NPC_HAZARD_LOOKAHEAD_DELTA = 0.18;
-const NPC_BOMB_AVOID_RADIUS = 246;
-const NPC_CACTUS_AVOID_RADIUS = 188;
-const NPC_OIL_AVOID_RADIUS = 198;
-const NPC_BOMB_AVOID_WEIGHT = 2.1;
-const NPC_CACTUS_AVOID_WEIGHT = 1.62;
-const NPC_OIL_AVOID_WEIGHT = 1.78;
-const NPC_HAZARD_AVOID_MAX_SHIFT = 96;
-const NPC_EDGE_CAUTION_START_RATIO = 0.58;
-const NPC_EDGE_AVOID_LOOKAHEAD = 0.022;
-const NPC_BENEFIT_LOOKAHEAD_DELTA = 0.34;
-const NPC_BENEFIT_MAX_DISTANCE = 560;
-const BODY_CROSSING_START_GRACE_MS = 1200;
-const BODY_CROSSING_EFFECT_COOLDOWN_MS = 260;
-const RACE_START_GHOST_MS = 900;
-const RACE_START_LAUNCH_SPEED_FACTOR = 0.24;
-const ALWAYS_MOVE_SNAKE_IDS = new Set(["speedster", "handler"]);
-const ALWAYS_MOVE_MIN_SPEED = 42;
-const ALWAYS_MOVE_OFFROAD_FACTOR = 0.72;
-const SPEEDSTER_BLOCK_EXTRA_TURN = 0.34;
-const SPEEDSTER_BLOCK_NUDGE = 4;
-const SPEEDSTER_BLOCK_MAX_SHIFT = 5.2;
-const SPEEDSTER_BLOCK_FORWARD_STEP = 4.8;
-const STALL_CHECK_WINDOW_MS = 780;
-const STALL_UNSTUCK_COOLDOWN_MS = 520;
-const STALL_MOVEMENT_EPSILON_SQ = 144;
-const STALL_PROGRESS_EPSILON = 0.0022;
-const STALL_NO_PROGRESS_WINDOW_MS = 1350;
-const STALL_UNSTUCK_LOOKAHEAD = 0.02;
-const STALL_RECOVERY_STEER_GAIN = 7.2;
-const STALL_HARD_RECOVERY_STEER_GAIN = 10.4;
-const STALL_OUTSIDE_RECOVERY_STEER_GAIN = 5.8;
-const STALL_UNSTUCK_GHOST_MS = 720;
-const STALL_HARD_UNSTUCK_LOOKAHEAD = 0.036;
-const STALL_HARD_UNSTUCK_GHOST_MS = 1100;
-const BOMB_HIT_IMMUNITY_MS = 1200;
-const BOMB_RECOVERY_SPEED_FACTOR = 0.26;
-const OUTSIDE_EXTRA_SLOWDOWN = 0.46;
-const OUTSIDE_RECOVERY_STEER_GAIN = 3.4;
-const OUTSIDE_RECOVERY_PULL_SPEED = 56;
-const OUTSIDE_MIN_CRAWL_SPEED = 12;
-const FINISHED_COAST_SPEED_FACTOR = 0.2;
-const FINISHED_COAST_STEER_GAIN = 2.1;
-const FINISHED_COAST_LOOKAHEAD = 0.008;
-const NO_TIME_LABEL = "--:--.---";
-const VENOM_PROJECTILE_RADIUS = 4.5;
-const VENOM_PROJECTILE_SPEED = 360;
-const VENOM_PROJECTILE_HIT_RADIUS = 13;
-const VENOM_PROJECTILE_MAX_LIFE_MS = 1800;
-const VENOM_SLOW_BASE_DURATION_MS = 1750;
-const RACE_COUNTDOWN_TOTAL_MS = 3000;
-const RACE_COUNTDOWN_SECONDS = 3;
-const COUNTDOWN_BURST_ANIM_CLASS = "countdown-burst";
-const COUNTDOWN_COLORS = {
-  3: "#63d8ff",
-  2: "#ffd56d",
-  1: "#ff7d64",
-};
-const TITLE_RACE_DURATION_STATS_KEY = "snake_race_duration_stats_v1";
-const TITLE_CRAWL_DURATION_EXTRA_FACTOR = 1.12;
-const TITLE_CRAWL_MIN_DURATION_MS = 42000;
-const TITLE_CRAWL_MAX_DURATION_MS = 132000;
-const TITLE_CRAWL_EMA_ALPHA = 0.24;
-const TITLE_CRAWL_PACE_FACTOR = 0.27;
-const TITLE_CRAWL_SIDE_PADDING = 24;
-const TITLE_CRAWL_SLOWDOWN_FACTOR = 4;
-const MATCH_SERVER_PORT = 2567;
-const TITLE_REMOTE_STATS_PATH = "/local-stats/race-duration";
-const TITLE_REMOTE_STATS_RETRY_MS = 20000;
-const TRACK_MUSIC = {
-  canyon_loop: { key: "music_formula1", path: "assets/sounds/Formula1.mp3", volume: 0.34 },
-};
-
-const BODY_ITEMS = {
-  APPLE: { color: "#ff5f6a", deltaSegments: 1 },
-  CACTUS: { color: "#4fd17b", deltaSegments: -1 },
-};
-const SNAKE_SPRITES_BASE_PATH = "assets/sprites/snakes";
-
-const SNAKES = [
-  {
-    id: "speedster",
-    name: "Speedster",
-    flavor: "Максималка выше всех, но тяжелее повернуть",
-    color: "#58f4ff",
-    stats: { maxSpeed: 238, accel: 330, drag: 1.3, turnRate: 2.52, offroadPenalty: 0.63, mass: 1.0 },
-    body: { segments: 18, spacing: 7.6, waveAmp: 4.8, waveFreq: 0.9, waveSpeed: 5.2, taper: 0.62 },
-    venom: { range: 128, cooldownMs: 2650, slowMul: 0.9, durationMs: 1450, speed: 385 },
-  },
-  {
-    id: "handler",
-    name: "Handler",
-    flavor: "Лучший контроль в поворотах",
-    color: "#9fff77",
-    stats: { maxSpeed: 214, accel: 318, drag: 1.25, turnRate: 3.0, offroadPenalty: 0.67, mass: 1.0 },
-    body: { segments: 16, spacing: 8.4, waveAmp: 3.2, waveFreq: 1.15, waveSpeed: 4.1, taper: 0.56 },
-    venom: { range: 168, cooldownMs: 2450, slowMul: 0.86, durationMs: 1650, speed: 360 },
-  },
-  {
-    id: "bully",
-    name: "Bully",
-    flavor: "Тяжелый корпус, сильнее толчки",
-    color: "#ff8c7c",
-    stats: { maxSpeed: 206, accel: 292, drag: 1.18, turnRate: 2.3, offroadPenalty: 0.71, mass: 1.35 },
-    body: { segments: 22, spacing: 8.8, waveAmp: 2.6, waveFreq: 0.72, waveSpeed: 3.1, taper: 0.72 },
-    venom: { range: 182, cooldownMs: 2520, slowMul: 0.83, durationMs: 1800, speed: 342 },
-  },
-  {
-    id: "trickster",
-    name: "Trickster",
-    flavor: "Почти не теряет темп вне дороги",
-    color: "#d6a7ff",
-    stats: { maxSpeed: 222, accel: 305, drag: 1.22, turnRate: 2.72, offroadPenalty: 0.82, mass: 0.95 },
-    body: { segments: 15, spacing: 7.1, waveAmp: 5.3, waveFreq: 1.32, waveSpeed: 6.0, taper: 0.52 },
-    venom: { range: 212, cooldownMs: 2200, slowMul: 0.81, durationMs: 1900, speed: 372 },
-  },
-];
-
-function snakeHeadTextureKey(snakeId) {
-  return `snake_head_${snakeId}`;
-}
-
-function snakeSegmentTextureKey(snakeId) {
-  return `snake_segment_${snakeId}`;
-}
-
-function snakeHeadTexturePath(snakeId) {
-  return `${SNAKE_SPRITES_BASE_PATH}/${snakeId}/head.png`;
-}
-
-function snakeSegmentTexturePath(snakeId) {
-  return `${SNAKE_SPRITES_BASE_PATH}/${snakeId}/segment.png`;
-}
-
-const PICKUP_TYPES = {
-  BOOST: { name: "BOOST", color: "#44f084", durationMs: 2600 },
-  SHIELD: { name: "SHIELD", color: "#63cfff", durationMs: 6500, charges: 1 },
-  OIL: { name: "OIL", color: "#ffc45f", durationMs: 2200 },
-  BOMB: { name: "BOMB", color: "#ff6975", durationMs: 1450, radius: 86 },
-};
-
-const PICKUP_ORDER = ["BOOST", "SHIELD", "OIL", "BOMB"];
-
-const NPC_PROFILES = [
-  { id: "careful", name: "аккуратный", speedFactor: 0.88, lookAhead: 130, steerGain: 2.2, brakeAngle: 0.48 },
-  { id: "normal", name: "ровный", speedFactor: 0.95, lookAhead: 145, steerGain: 2.45, brakeAngle: 0.56 },
-  { id: "aggressive", name: "агро", speedFactor: 1.02, lookAhead: 160, steerGain: 2.65, brakeAngle: 0.66 },
-  { id: "maniac", name: "маньяк", speedFactor: 1.08, lookAhead: 172, steerGain: 2.85, brakeAngle: 0.76 },
-];
-
-const TRACK_DEFS = [
-  {
-    id: "canyon_loop",
-    name: "Canyon Loop",
-    subtitle: "Быстрая трасса с затяжными связками",
-    roadWidth: 52,
-    outsideWidth: 90,
-    checkpointFractions: [0, 0.15, 0.33, 0.49, 0.68, 0.84],
-    pickupFractions: [0.07, 0.21, 0.31, 0.42, 0.58, 0.73, 0.86, 0.93],
-    createPoints: () => {
-      const points = [];
-      const steps = 180;
-      for (let i = 0; i < steps; i += 1) {
-        const t = (i / steps) * TAU;
-        const x = 492 + Math.cos(t) * 315 + Math.cos(2 * t + 0.8) * 58;
-        const y = 312 + Math.sin(t) * 198 + Math.sin(3 * t - 0.4) * 39;
-        points.push({ x, y });
-      }
-      return points;
-    },
-  },
-  {
-    id: "switchback_run",
-    name: "Switchback Run",
-    subtitle: "Больше смен темпа и двойные апексы",
-    roadWidth: 50,
-    outsideWidth: 88,
-    checkpointFractions: [0, 0.12, 0.25, 0.4, 0.56, 0.74, 0.88],
-    pickupFractions: [0.05, 0.16, 0.29, 0.39, 0.51, 0.64, 0.79, 0.9],
-    createPoints: () => {
-      const points = [];
-      const steps = 200;
-      for (let i = 0; i < steps; i += 1) {
-        const t = (i / steps) * TAU;
-        const x = 488 + Math.cos(t) * 268 + Math.sin(2 * t) * 98 + Math.cos(3 * t) * 26;
-        const y = 312 + Math.sin(t) * 162 + Math.sin(4 * t + 0.5) * 58;
-        points.push({ x, y });
-      }
-      return points;
-    },
-  },
-  {
-    id: "twin_fang",
-    name: "Twin Fang",
-    subtitle: "Почти восьмерка с коварными перекладками",
-    roadWidth: 48,
-    outsideWidth: 86,
-    checkpointFractions: [0, 0.11, 0.26, 0.43, 0.57, 0.72, 0.87],
-    pickupFractions: [0.04, 0.17, 0.27, 0.36, 0.53, 0.68, 0.81, 0.92],
-    createPoints: () => {
-      const points = [];
-      const steps = 220;
-      for (let i = 0; i < steps; i += 1) {
-        const t = (i / steps) * TAU;
-        const x = 490 + Math.sin(t) * 300 + Math.sin(3 * t) * 20;
-        const y = 310 + Math.sin(2 * t) * 162 + Math.cos(t) * 12;
-        points.push({ x, y });
-      }
-      return points;
-    },
-  },
-  {
-    id: "dune_orbit",
-    name: "Dune Orbit",
-    subtitle: "Песчаный овал с волной по дугам",
-    roadWidth: 50,
-    outsideWidth: 90,
-    checkpointFractions: [0, 0.13, 0.24, 0.37, 0.51, 0.64, 0.78, 0.9],
-    pickupFractions: [0.03, 0.11, 0.19, 0.28, 0.4, 0.53, 0.66, 0.74, 0.83, 0.92],
-    createPoints: () => {
-      const points = [];
-      const steps = 210;
-      for (let i = 0; i < steps; i += 1) {
-        const t = (i / steps) * TAU;
-        const x = 490 + Math.cos(t) * 330 + Math.cos(3 * t + 0.5) * 34;
-        const y = 312 + Math.sin(t) * 190 + Math.sin(2 * t - 0.8) * 46 + Math.sin(5 * t) * 12;
-        points.push({ x, y });
-      }
-      return points;
-    },
-  },
-  {
-    id: "neon_delta",
-    name: "Neon Delta",
-    subtitle: "Три прямых зоны и резкие связки",
-    roadWidth: 49,
-    outsideWidth: 88,
-    checkpointFractions: [0, 0.1, 0.22, 0.35, 0.49, 0.61, 0.74, 0.87],
-    pickupFractions: [0.05, 0.14, 0.23, 0.31, 0.43, 0.56, 0.67, 0.75, 0.86, 0.94],
-    createPoints: () => {
-      const points = [];
-      const steps = 240;
-      for (let i = 0; i < steps; i += 1) {
-        const t = (i / steps) * TAU;
-        const triangleX = Math.asin(Math.sin(t)) * (2 / Math.PI);
-        const triangleY = Math.asin(Math.sin(t + 1.2)) * (2 / Math.PI);
-        const x = 490 + triangleX * 315 + Math.sin(4 * t) * 26 + Math.cos(2 * t - 0.2) * 20;
-        const y = 312 + triangleY * 170 + Math.sin(3 * t + 0.3) * 34;
-        points.push({ x, y });
-      }
-      return points;
-    },
-  },
-  {
-    id: "volcano_spiral",
-    name: "Вулканическая спираль",
-    subtitle: "Узкие дуги и пульсирующие связки в поворотах",
-    roadWidth: 50,
-    outsideWidth: 90,
-    checkpointFractions: [0, 0.09, 0.2, 0.32, 0.46, 0.6, 0.73, 0.86],
-    pickupFractions: [0.04, 0.12, 0.18, 0.27, 0.38, 0.49, 0.58, 0.69, 0.81, 0.93],
-    createPoints: () => {
-      const points = [];
-      const steps = 240;
-      for (let i = 0; i < steps; i += 1) {
-        const t = (i / steps) * TAU;
-        const x = 490 + Math.cos(t) * 308 + Math.cos(2 * t + 1.1) * 76 + Math.sin(5 * t + 0.2) * 14;
-        const y = 310 + Math.sin(t) * 176 + Math.sin(3 * t - 0.35) * 62 + Math.cos(4 * t + 0.6) * 11;
-        points.push({ x, y });
-      }
-      return points;
-    },
-  },
-  {
-    id: "glacier_chicane",
-    name: "Ледяная шикана",
-    subtitle: "Длинные прямые с быстрыми шиканами и перекладками",
-    roadWidth: 51,
-    outsideWidth: 92,
-    checkpointFractions: [0, 0.11, 0.23, 0.35, 0.48, 0.61, 0.74, 0.88],
-    pickupFractions: [0.03, 0.14, 0.22, 0.3, 0.41, 0.52, 0.63, 0.72, 0.84, 0.95],
-    createPoints: () => {
-      const points = [];
-      const steps = 250;
-      for (let i = 0; i < steps; i += 1) {
-        const t = (i / steps) * TAU;
-        const triX = Math.asin(Math.sin(t)) * (2 / Math.PI);
-        const triY = Math.asin(Math.sin(t + 1.5)) * (2 / Math.PI);
-        const x = 490 + triX * 324 + Math.sin(3 * t + 0.15) * 34 + Math.cos(5 * t) * 10;
-        const y = 312 + triY * 182 + Math.sin(2 * t + 0.65) * 28 + Math.sin(6 * t - 0.4) * 13;
-        points.push({ x, y });
-      }
-      return points;
-    },
-  },
-];
+import {
+  TOTAL_RACERS,
+  OFFLINE_MODES,
+  DEFAULT_OFFLINE_MODE,
+  CANVAS_WIDTH,
+  CANVAS_HEIGHT,
+  TAU,
+  RACE_TIMEOUT_MS,
+  PICKUP_RESPAWN_MS,
+  STORAGE_PREFIX,
+  OFFROAD_EXTRA_SLOWDOWN,
+  MAX_HISTORY_POINTS,
+  BODY_ITEM_COUNT,
+  BODY_ITEM_RESPAWN_MS,
+  CACTUS_SEGMENT_LOSS_CHANCE,
+  START_BODY_SEGMENTS,
+  MIN_BODY_SEGMENTS,
+  MAX_BODY_SEGMENTS,
+  STARVATION_DECAY_INTERVAL_MS,
+  STARVATION_DECAY_SEGMENTS,
+  APPLE_BOOST_DURATION_MS,
+  APPLE_BOOST_SPEED_MUL,
+  APPLE_BOOST_ACCEL_MUL,
+  APPLE_BOOST_INSTANT_SPEED_FACTOR,
+  EXHAUSTION_CRAWL_THRESHOLD,
+  EXHAUSTION_CRAWL_SPEED_FACTOR,
+  EXHAUSTION_SLOWDOWN_PER_STEP,
+  EXHAUSTION_SLOWDOWN_MIN_FACTOR,
+  CRITICAL_SEGMENTS_THRESHOLD,
+  CRITICAL_SEGMENTS_SLOWDOWN,
+  BODY_ITEM_MIN_SEPARATION,
+  BODY_ITEM_TO_CHECKPOINT_MIN_DIST,
+  BODY_ITEM_TO_START_CHECKPOINT_MIN_DIST,
+  BODY_ITEM_TO_PICKUP_MIN_DIST,
+  CROSS_ACCEL_SNAKE_ID,
+  BODY_CROSS_SLOWDOWN_MUL,
+  SPEEDSTER_BODY_BLOCK_PUSH,
+  BULLY_PUSH_DISTANCE,
+  RESTART_DEBOUNCE_MS,
+  APPLE_STARTLINE_AVOID_RADIUS,
+  NPC_HAZARD_LOOKAHEAD_DELTA,
+  NPC_BOMB_AVOID_RADIUS,
+  NPC_CACTUS_AVOID_RADIUS,
+  NPC_OIL_AVOID_RADIUS,
+  NPC_BOMB_AVOID_WEIGHT,
+  NPC_CACTUS_AVOID_WEIGHT,
+  NPC_OIL_AVOID_WEIGHT,
+  NPC_HAZARD_AVOID_MAX_SHIFT,
+  NPC_EDGE_CAUTION_START_RATIO,
+  NPC_EDGE_AVOID_LOOKAHEAD,
+  NPC_BENEFIT_LOOKAHEAD_DELTA,
+  NPC_BENEFIT_MAX_DISTANCE,
+  BODY_CROSSING_START_GRACE_MS,
+  BODY_CROSSING_EFFECT_COOLDOWN_MS,
+  RACE_START_GHOST_MS,
+  RACE_START_LAUNCH_SPEED_FACTOR,
+  ALWAYS_MOVE_SNAKE_IDS,
+  ALWAYS_MOVE_MIN_SPEED,
+  ALWAYS_MOVE_OFFROAD_FACTOR,
+  SPEEDSTER_BLOCK_EXTRA_TURN,
+  SPEEDSTER_BLOCK_NUDGE,
+  SPEEDSTER_BLOCK_MAX_SHIFT,
+  SPEEDSTER_BLOCK_FORWARD_STEP,
+  STALL_CHECK_WINDOW_MS,
+  STALL_UNSTUCK_COOLDOWN_MS,
+  STALL_MOVEMENT_EPSILON_SQ,
+  STALL_PROGRESS_EPSILON,
+  STALL_NO_PROGRESS_WINDOW_MS,
+  STALL_UNSTUCK_LOOKAHEAD,
+  STALL_RECOVERY_STEER_GAIN,
+  STALL_HARD_RECOVERY_STEER_GAIN,
+  STALL_OUTSIDE_RECOVERY_STEER_GAIN,
+  STALL_UNSTUCK_GHOST_MS,
+  STALL_HARD_UNSTUCK_LOOKAHEAD,
+  STALL_HARD_UNSTUCK_GHOST_MS,
+  BOMB_HIT_IMMUNITY_MS,
+  BOMB_RECOVERY_SPEED_FACTOR,
+  OUTSIDE_EXTRA_SLOWDOWN,
+  OUTSIDE_RECOVERY_STEER_GAIN,
+  OUTSIDE_RECOVERY_PULL_SPEED,
+  OUTSIDE_MIN_CRAWL_SPEED,
+  FINISHED_COAST_SPEED_FACTOR,
+  FINISHED_COAST_STEER_GAIN,
+  FINISHED_COAST_LOOKAHEAD,
+  NO_TIME_LABEL,
+  VENOM_PROJECTILE_RADIUS,
+  VENOM_PROJECTILE_SPEED,
+  VENOM_PROJECTILE_HIT_RADIUS,
+  VENOM_PROJECTILE_MAX_LIFE_MS,
+  VENOM_SLOW_BASE_DURATION_MS,
+  RACE_COUNTDOWN_TOTAL_MS,
+  RACE_COUNTDOWN_SECONDS,
+  COUNTDOWN_BURST_ANIM_CLASS,
+  COUNTDOWN_COLORS,
+  TITLE_RACE_DURATION_STATS_KEY,
+  TITLE_CRAWL_DURATION_EXTRA_FACTOR,
+  TITLE_CRAWL_MIN_DURATION_MS,
+  TITLE_CRAWL_MAX_DURATION_MS,
+  TITLE_CRAWL_EMA_ALPHA,
+  TITLE_CRAWL_PACE_FACTOR,
+  TITLE_CRAWL_SIDE_PADDING,
+  TITLE_CRAWL_SLOWDOWN_FACTOR,
+  MATCH_SERVER_PORT,
+  TITLE_REMOTE_STATS_PATH,
+  TITLE_REMOTE_STATS_RETRY_MS,
+  TRACK_MUSIC,
+} from "./src/game/config.js";
+import {
+  BODY_ITEMS,
+  SNAKES,
+  snakeHeadTextureKey,
+  snakeSegmentTextureKey,
+  snakeHeadTexturePath,
+  snakeSegmentTexturePath,
+  PICKUP_TYPES,
+  PICKUP_ORDER,
+  NPC_PROFILES,
+  TRACK_DEFS,
+} from "./src/game/catalog.js";
+import {
+  clamp,
+  lerp,
+  sqrDistance,
+  shortestAngle,
+  wrapAngle,
+  normalizeVec,
+  mod1,
+  forwardTrackDelta,
+  signedTrackDelta,
+  hexToInt,
+} from "./src/game/utils.js";
+import { buildTrackRuntime, sampleTrack, projectOnTrack } from "./src/game/trackMath.js";
+import { renderRace as renderRaceView, renderIdle as renderIdleView } from "./src/game/render.js";
 
 // -----------------------------
 // DOM Handles and Global State
@@ -1574,7 +1364,11 @@ function checkBodyItemCollection(race, racer, nowMs) {
 }
 
 function applyBodyItem(racer, itemType, nowMs) {
-  const delta = BODY_ITEMS[itemType]?.deltaSegments ?? 0;
+  let delta = BODY_ITEMS[itemType]?.deltaSegments ?? 0;
+  if (itemType === "CACTUS" && delta < 0) {
+    // Cactus now applies damage in ~66% of pickups (about one-third softer overall).
+    delta = Math.random() < CACTUS_SEGMENT_LOSS_CHANCE ? delta : 0;
+  }
   applyBodySegmentDelta(racer, delta, nowMs, itemType);
   if (itemType === "APPLE") {
     addEffect(racer, "APPLE_BOOST", APPLE_BOOST_DURATION_MS, nowMs, {
@@ -2801,479 +2595,16 @@ function readActiveEffectLabel(racer) {
 // Rendering
 // -----------------------------
 function renderRace(scene, race, nowMs) {
-  const g = scene.graphics;
-  drawBackground(g);
-  drawTrack(g, race.track);
-  drawCheckpoints(g, race.track);
-  drawBodyItems(g, race.bodyItems);
-  drawPickups(g, race.pickups);
-  drawVenomShots(g, race.venomShots || []);
-  drawRacers(scene, g, race.racers);
-  syncRacerRenderSprites(scene, race.racers, true);
-  syncRacerLabels(scene, race.racers, true);
-
-  const phaseText = race.phase === "countdown" ? "Отсчет" : race.phase === "running" ? "Гонка" : "Финиш";
-  scene.infoText.setVisible(true);
-  scene.infoText.setText([
-    `Трасса: ${race.trackDef.name}`,
-    `Фаза: ${phaseText}`,
-    `Время: ${formatMs(Math.max(0, nowMs - race.raceStartMs))}`,
-  ]);
+  return renderRaceView(scene, race, nowMs, { formatMs, getRacerMotionHeading });
 }
 
 function renderIdle(scene) {
-  drawBackground(scene.graphics);
-  scene.infoText.setVisible(false);
-  syncRacerRenderSprites(scene, [], false);
-  syncRacerLabels(scene, [], false);
-}
-
-function drawBackground(g) {
-  g.clear();
-  // Grass base with warmer tint for a more natural terrain look.
-  g.fillGradientStyle(0x264827, 0x264827, 0x1d381f, 0x1d381f, 1);
-  g.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-  g.fillStyle(0x335d2f, 0.22);
-  g.fillEllipse(CANVAS_WIDTH * 0.24, CANVAS_HEIGHT * 0.2, 360, 240);
-  g.fillEllipse(CANVAS_WIDTH * 0.74, CANVAS_HEIGHT * 0.25, 300, 220);
-  g.fillEllipse(CANVAS_WIDTH * 0.62, CANVAS_HEIGHT * 0.74, 420, 260);
-  g.fillStyle(0x1a311a, 0.18);
-  g.fillEllipse(CANVAS_WIDTH * 0.45, CANVAS_HEIGHT * 0.46, 300, 170);
-}
-
-function drawTrack(g, track) {
-  // Outer verge (grass shoulder).
-  g.lineStyle((track.outsideWidth + 16) * 2, 0x3f6d33, 0.38);
-  strokeClosedPolyline(g, track.points);
-
-  // Dirt layer between grass and asphalt.
-  g.lineStyle(track.outsideWidth * 2, 0x8d6c45, 0.78);
-  strokeClosedPolyline(g, track.points);
-
-  // Dusty edge to soften transition into asphalt.
-  g.lineStyle((track.roadWidth + 6) * 2, 0x8f7d61, 0.34);
-  strokeClosedPolyline(g, track.points);
-
-  // Asphalt.
-  g.lineStyle(track.roadWidth * 2, 0x5c5d59, 0.95);
-  strokeClosedPolyline(g, track.points);
-
-  // Center marking.
-  g.lineStyle(2, 0xf2dc9a, 0.76);
-  drawDashedPolyline(g, track.points, 11, 11);
-}
-
-function strokeClosedPolyline(g, points) {
-  if (!points.length) {
-    return;
-  }
-  g.beginPath();
-  g.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i < points.length; i += 1) {
-    g.lineTo(points[i].x, points[i].y);
-  }
-  g.lineTo(points[0].x, points[0].y);
-  g.strokePath();
-}
-
-function drawDashedPolyline(g, points, dash, gap) {
-  if (points.length < 2) {
-    return;
-  }
-  for (let i = 0; i < points.length; i += 1) {
-    const a = points[i];
-    const b = points[(i + 1) % points.length];
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const len = Math.hypot(dx, dy);
-    if (len < 0.001) {
-      continue;
-    }
-    const nx = dx / len;
-    const ny = dy / len;
-    let pos = 0;
-    let paint = true;
-    while (pos < len) {
-      const segLen = Math.min(paint ? dash : gap, len - pos);
-      if (paint) {
-        const x1 = a.x + nx * pos;
-        const y1 = a.y + ny * pos;
-        const x2 = a.x + nx * (pos + segLen);
-        const y2 = a.y + ny * (pos + segLen);
-        g.lineBetween(x1, y1, x2, y2);
-      }
-      pos += segLen;
-      paint = !paint;
-    }
-  }
-}
-
-function drawCheckpoints(g, track) {
-  for (let i = 0; i < track.checkpoints.length; i += 1) {
-    const cp = track.checkpoints[i];
-    g.fillStyle(i === 0 ? 0xff6565 : 0x62dbff, i === 0 ? 0.9 : 0.85);
-    g.fillCircle(cp.x, cp.y, i === 0 ? 8 : 6);
-  }
-}
-
-function drawBodyItems(g, bodyItems) {
-  for (const item of bodyItems) {
-    if (!item.active) {
-      continue;
-    }
-    if (item.type === "APPLE") {
-      drawApple(g, item.x, item.y, item.radius);
-    } else {
-      drawCactus(g, item.x, item.y, item.radius);
-    }
-  }
-}
-
-function drawApple(g, x, y, radius) {
-  g.fillStyle(hexToInt(BODY_ITEMS.APPLE.color), 0.95);
-  g.fillCircle(x, y, radius * 0.9);
-  g.fillStyle(0x8d2e35, 0.34);
-  g.fillCircle(x + radius * 0.28, y - radius * 0.1, radius * 0.28);
-  g.lineStyle(2, 0x6b4a2d, 1);
-  g.lineBetween(x, y - radius, x + 2, y - radius - 7);
-  g.fillStyle(0x67d275, 0.95);
-  g.fillEllipse(x + 6, y - radius - 6, 8, 5);
-}
-
-function drawCactus(g, x, y, radius) {
-  const color = hexToInt(BODY_ITEMS.CACTUS.color);
-  const h = radius * 1.8;
-  const arm = radius * 0.9;
-  g.fillStyle(color, 0.95);
-  g.fillRoundedRect(x - radius * 0.35, y - h * 0.5, radius * 0.7, h, 3);
-  g.fillRoundedRect(x - arm, y - h * 0.2, arm * 0.65, radius * 0.5, 3);
-  g.fillRoundedRect(x + radius * 0.35, y - h * 0.06, arm * 0.65, radius * 0.5, 3);
-  g.lineStyle(1, 0x2f874f, 0.95);
-  g.lineBetween(x - radius * 0.12, y - h * 0.45, x - radius * 0.12, y + h * 0.43);
-  g.lineBetween(x + radius * 0.12, y - h * 0.45, x + radius * 0.12, y + h * 0.43);
-}
-
-function drawPickups(g, pickups) {
-  for (const pickup of pickups) {
-    if (!pickup.active) {
-      continue;
-    }
-    const color = hexToInt(PICKUP_TYPES[pickup.type].color);
-    const size = 7;
-    g.fillStyle(color, 1);
-    g.fillPoints(
-      [
-        { x: pickup.x, y: pickup.y - size },
-        { x: pickup.x + size, y: pickup.y },
-        { x: pickup.x, y: pickup.y + size },
-        { x: pickup.x - size, y: pickup.y },
-      ],
-      true
-    );
-  }
-}
-
-function drawVenomShots(g, venomShots) {
-  for (const shot of venomShots) {
-    const base = shot.color || 0x8df36a;
-    g.fillStyle(base, 0.88);
-    g.fillCircle(shot.x, shot.y, shot.radius);
-    g.lineStyle(1, 0xeaffdf, 0.78);
-    g.strokeCircle(shot.x, shot.y, shot.radius + 1.8);
-  }
-}
-
-function drawRacers(scene, g, racers) {
-  racers.forEach((racer) => {
-    if (!supportsSnakeSegmentSprite(scene, racer.typeId)) {
-      drawBodySegments(g, racer);
-    }
-    drawTrail(g, racer);
-  });
-  racers.forEach((racer) => {
-    if (!supportsSnakeHeadSprite(scene, racer.typeId)) {
-      drawRacerBody(g, racer);
-    }
-  });
-}
-
-function supportsSnakeHeadSprite(scene, snakeId) {
-  const support = scene.spriteSupportMap?.get(snakeId);
-  return Boolean(support && support.head);
-}
-
-function supportsSnakeSegmentSprite(scene, snakeId) {
-  const support = scene.spriteSupportMap?.get(snakeId);
-  return Boolean(support && support.segment);
-}
-
-function syncRacerRenderSprites(scene, racers, visible) {
-  const live = new Set();
-
-  for (const racer of racers) {
-    live.add(racer.id);
-    syncRacerHeadSprite(scene, racer, visible);
-    syncRacerSegmentSprites(scene, racer, visible);
-  }
-
-  scene.headSpriteMap.forEach((sprite, racerId) => {
-    if (!live.has(racerId) || !visible) {
-      sprite.setVisible(false);
-    }
-  });
-
-  scene.segmentSpriteMap.forEach((pool, racerId) => {
-    if (!live.has(racerId) || !visible) {
-      for (const sprite of pool) {
-        sprite.setVisible(false);
-      }
-    }
-  });
-}
-
-function syncRacerHeadSprite(scene, racer, visible) {
-  if (!supportsSnakeHeadSprite(scene, racer.typeId)) {
-    const existing = scene.headSpriteMap.get(racer.id);
-    if (existing) {
-      existing.setVisible(false);
-    }
-    return;
-  }
-
-  const key = snakeHeadTextureKey(racer.typeId);
-  let sprite = scene.headSpriteMap.get(racer.id);
-  if (!sprite) {
-    sprite = scene.add.image(0, 0, key).setDepth(23);
-    sprite.setOrigin(0.5, 0.5);
-    scene.headSpriteMap.set(racer.id, sprite);
-  } else if (sprite.texture.key !== key) {
-    sprite.setTexture(key);
-  }
-
-  sprite.setVisible(visible);
-  sprite.setPosition(racer.x, racer.y);
-  const renderHeading = getRacerMotionHeading(racer, 0.02, 16) ?? racer.heading;
-  sprite.setRotation(renderHeading);
-  const headSize = 28;
-  sprite.setDisplaySize(headSize, headSize);
-  sprite.setAlpha(1);
-}
-
-function syncRacerSegmentSprites(scene, racer, visible) {
-  let pool = scene.segmentSpriteMap.get(racer.id);
-  if (!pool) {
-    pool = [];
-    scene.segmentSpriteMap.set(racer.id, pool);
-  }
-
-  if (!supportsSnakeSegmentSprite(scene, racer.typeId)) {
-    for (const sprite of pool) {
-      sprite.setVisible(false);
-    }
-    return;
-  }
-
-  const key = snakeSegmentTextureKey(racer.typeId);
-  const segments = racer.bodySegments || [];
-
-  for (let i = 0; i < segments.length; i += 1) {
-    const segment = segments[i];
-    let sprite = pool[i];
-    if (!sprite) {
-      sprite = scene.add.image(0, 0, key).setDepth(17);
-      sprite.setOrigin(0.5, 0.5);
-      pool.push(sprite);
-    } else if (sprite.texture.key !== key) {
-      sprite.setTexture(key);
-    }
-
-    sprite.setVisible(visible);
-    sprite.setPosition(segment.x, segment.y);
-    // Segment sprite must face opposite to movement (tail direction).
-    sprite.setRotation(wrapAngle(segment.heading + Math.PI));
-    const size = Math.max(4, segment.radius * 2.25 * SEGMENT_RENDER_SCALE);
-    sprite.setDisplaySize(size, size);
-    sprite.setAlpha(segment.alpha);
-  }
-
-  for (let i = segments.length; i < pool.length; i += 1) {
-    pool[i].setVisible(false);
-  }
-}
-
-function drawBodySegments(g, racer) {
-  if (!racer.bodySegments || !racer.bodySegments.length) {
-    return;
-  }
-  const color = hexToInt(racer.color);
-  for (let i = racer.bodySegments.length - 1; i >= 0; i -= 1) {
-    const segment = racer.bodySegments[i];
-    g.fillStyle(color, segment.alpha);
-    g.fillCircle(segment.x, segment.y, segment.radius * SEGMENT_RENDER_SCALE);
-  }
-}
-
-function drawTrail(g, racer) {
-  if (!racer.trail.length) {
-    return;
-  }
-  const color = hexToInt(racer.color);
-  for (let i = 0; i < racer.trail.length; i += 1) {
-    const point = racer.trail[i];
-    const alpha = i / racer.trail.length;
-    const radius = 3 + alpha * 4;
-    g.fillStyle(color, 0.05 + alpha * 0.12);
-    g.fillCircle(point.x, point.y, radius);
-  }
-}
-
-function drawRacerBody(g, racer) {
-  const renderHeading = getRacerMotionHeading(racer, 0.02, 16) ?? racer.heading;
-  const p1 = rotatePoint(15, 0, renderHeading, racer.x, racer.y);
-  const p2 = rotatePoint(-11, 8, renderHeading, racer.x, racer.y);
-  const p3 = rotatePoint(-6, 0, renderHeading, racer.x, racer.y);
-  const p4 = rotatePoint(-11, -8, renderHeading, racer.x, racer.y);
-
-  g.fillStyle(hexToInt(racer.color), 1);
-  g.fillPoints([p1, p2, p3, p4], true);
-
-  g.lineStyle(1.3, 0x080a0e, 0.65);
-  g.beginPath();
-  g.moveTo(p1.x, p1.y);
-  g.lineTo(p2.x, p2.y);
-  g.lineTo(p3.x, p3.y);
-  g.lineTo(p4.x, p4.y);
-  g.closePath();
-  g.strokePath();
-
-  if (racer.shieldCharges > 0) {
-    g.lineStyle(2, 0x63cfff, 0.86);
-    g.strokeCircle(racer.x, racer.y, 16);
-  }
-}
-
-function rotatePoint(localX, localY, angle, baseX, baseY) {
-  const c = Math.cos(angle);
-  const s = Math.sin(angle);
-  return {
-    x: baseX + localX * c - localY * s,
-    y: baseY + localX * s + localY * c,
-  };
-}
-
-function syncRacerLabels(scene, racers, visible) {
-  const live = new Set();
-  for (const racer of racers) {
-    let label = scene.labelMap.get(racer.id);
-    if (!label) {
-      label = scene.add
-        .text(0, 0, "", {
-          fontFamily: "\"Exo 2\", sans-serif",
-          fontSize: "12px",
-          color: "#e9f2ff",
-          stroke: "#0a1020",
-          strokeThickness: 2,
-        })
-        .setDepth(25);
-      scene.labelMap.set(racer.id, label);
-    }
-    label.setVisible(visible);
-    label.setText(racer.name);
-    label.setPosition(racer.x - 24, racer.y - 26);
-    live.add(racer.id);
-  }
-
-  scene.labelMap.forEach((label, id) => {
-    if (!live.has(id) || !visible) {
-      label.setVisible(false);
-    }
-  });
+  return renderIdleView(scene, { getRacerMotionHeading });
 }
 
 // -----------------------------
 // Track Geometry and Utilities
 // -----------------------------
-function buildTrackRuntime(def) {
-  const points = def.createPoints();
-  const segments = [];
-  let totalLength = 0;
-
-  for (let i = 0; i < points.length; i += 1) {
-    const a = points[i];
-    const b = points[(i + 1) % points.length];
-    const len = Math.hypot(b.x - a.x, b.y - a.y);
-    segments.push({ a, b, len, start: totalLength });
-    totalLength += len;
-  }
-
-  const checkpoints = def.checkpointFractions.map((fraction) => sampleTrack({ points, segments, totalLength }, fraction));
-  const pickupFractions = [...def.pickupFractions];
-
-  return {
-    defId: def.id,
-    points,
-    segments,
-    totalLength,
-    roadWidth: def.roadWidth,
-    outsideWidth: def.outsideWidth,
-    checkpoints: checkpoints.map((cp) => ({ x: cp.x, y: cp.y, fraction: cp.fraction })),
-    checkpointRadius: def.roadWidth * 0.48,
-    pickupFractions,
-  };
-}
-
-function sampleTrack(track, fractionRaw) {
-  const fraction = mod1(fractionRaw);
-  const target = fraction * track.totalLength;
-  for (const segment of track.segments) {
-    if (target <= segment.start + segment.len) {
-      const local = segment.len === 0 ? 0 : (target - segment.start) / segment.len;
-      const x = lerp(segment.a.x, segment.b.x, local);
-      const y = lerp(segment.a.y, segment.b.y, local);
-      const tangent = normalizeVec(segment.b.x - segment.a.x, segment.b.y - segment.a.y);
-      return { x, y, tangent, fraction };
-    }
-  }
-  const last = track.segments[track.segments.length - 1];
-  const tangent = normalizeVec(last.b.x - last.a.x, last.b.y - last.a.y);
-  return { x: last.b.x, y: last.b.y, tangent, fraction };
-}
-
-function projectOnTrack(track, x, y) {
-  let bestDistSq = Infinity;
-  let bestProjection = null;
-  for (const segment of track.segments) {
-    const proj = projectPointOnSegment(x, y, segment.a.x, segment.a.y, segment.b.x, segment.b.y);
-    if (proj.distSq < bestDistSq) {
-      bestDistSq = proj.distSq;
-      const distOnTrack = segment.start + segment.len * proj.t;
-      const tangent = normalizeVec(segment.b.x - segment.a.x, segment.b.y - segment.a.y);
-      bestProjection = {
-        x: proj.x,
-        y: proj.y,
-        distance: Math.sqrt(bestDistSq),
-        tNorm: distOnTrack / track.totalLength,
-        tangent,
-      };
-    }
-  }
-  return bestProjection;
-}
-
-function projectPointOnSegment(px, py, ax, ay, bx, by) {
-  const abx = bx - ax;
-  const aby = by - ay;
-  const abLenSq = abx * abx + aby * aby || 1;
-  const apx = px - ax;
-  const apy = py - ay;
-  const t = clamp((apx * abx + apy * aby) / abLenSq, 0, 1);
-  const x = ax + abx * t;
-  const y = ay + aby * t;
-  const dx = px - x;
-  const dy = py - y;
-  return { x, y, t, distSq: dx * dx + dy * dy };
-}
-
 function loadBestTime(trackId) {
   const raw = localStorage.getItem(`${STORAGE_PREFIX}${trackId}`);
   const n = Number(raw);
@@ -3330,66 +2661,3 @@ function syncRaceMusic() {
   });
 }
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
-
-function sqrDistance(ax, ay, bx, by) {
-  const dx = ax - bx;
-  const dy = ay - by;
-  return dx * dx + dy * dy;
-}
-
-function shortestAngle(from, to) {
-  let delta = to - from;
-  while (delta > Math.PI) {
-    delta -= TAU;
-  }
-  while (delta < -Math.PI) {
-    delta += TAU;
-  }
-  return delta;
-}
-
-function wrapAngle(angle) {
-  while (angle > Math.PI) {
-    angle -= TAU;
-  }
-  while (angle < -Math.PI) {
-    angle += TAU;
-  }
-  return angle;
-}
-
-function normalizeVec(x, y) {
-  const len = Math.hypot(x, y) || 1;
-  return { x: x / len, y: y / len };
-}
-
-function mod1(value) {
-  return ((value % 1) + 1) % 1;
-}
-
-function forwardTrackDelta(fromNorm, toNorm) {
-  return toNorm >= fromNorm ? toNorm - fromNorm : 1 - fromNorm + toNorm;
-}
-
-function signedTrackDelta(fromNorm, toNorm) {
-  let delta = toNorm - fromNorm;
-  if (delta > 0.5) {
-    delta -= 1;
-  } else if (delta < -0.5) {
-    delta += 1;
-  }
-  return delta;
-}
-
-function hexToInt(hex) {
-  const c = hex.replace("#", "");
-  const value = c.length === 3 ? c.split("").map((part) => `${part}${part}`).join("") : c;
-  return Number.parseInt(value, 16);
-}

@@ -1,0 +1,116 @@
+// Shared gameplay constants
+export const TOTAL_RACERS = 4;
+export const OFFLINE_MODES = {
+  CLASSIC: "classic_1p_3npc",
+  DEBUG: "debug_4npc",
+};
+export const DEFAULT_OFFLINE_MODE = OFFLINE_MODES.DEBUG;
+export const CANVAS_WIDTH = 980;
+export const CANVAS_HEIGHT = 620;
+export const TAU = Math.PI * 2;
+export const RACE_TIMEOUT_MS = 120000;
+export const PICKUP_RESPAWN_MS = 8000;
+export const STORAGE_PREFIX = "snake_drift_best_";
+export const OFFROAD_EXTRA_SLOWDOWN = 0.84;
+export const MAX_HISTORY_POINTS = 320;
+export const BODY_ITEM_COUNT = 12;
+export const BODY_ITEM_RESPAWN_MS = 3600;
+export const CACTUS_SEGMENT_LOSS_CHANCE = 2 / 3;
+export const START_BODY_SEGMENTS = 8;
+export const MIN_BODY_SEGMENTS = 1;
+export const MAX_BODY_SEGMENTS = 56;
+export const STARVATION_DECAY_INTERVAL_MS = 12000;
+export const STARVATION_DECAY_SEGMENTS = 1;
+export const APPLE_BOOST_DURATION_MS = 680;
+export const APPLE_BOOST_SPEED_MUL = 1.48;
+export const APPLE_BOOST_ACCEL_MUL = 1.34;
+export const APPLE_BOOST_INSTANT_SPEED_FACTOR = 0.44;
+export const EXHAUSTION_CRAWL_THRESHOLD = 3;
+export const EXHAUSTION_CRAWL_SPEED_FACTOR = 0.36;
+export const EXHAUSTION_SLOWDOWN_PER_STEP = 0.17;
+export const EXHAUSTION_SLOWDOWN_MIN_FACTOR = 0.32;
+export const CRITICAL_SEGMENTS_THRESHOLD = 4;
+export const CRITICAL_SEGMENTS_SLOWDOWN = 0.55;
+export const BODY_ITEM_MIN_SEPARATION = 64;
+export const BODY_ITEM_TO_CHECKPOINT_MIN_DIST = 62;
+export const BODY_ITEM_TO_START_CHECKPOINT_MIN_DIST = 150;
+export const BODY_ITEM_TO_PICKUP_MIN_DIST = 40;
+export const CROSS_ACCEL_SNAKE_ID = "handler";
+export const BODY_CROSS_SLOWDOWN_MUL = 0.9;
+export const SPEEDSTER_BODY_BLOCK_PUSH = 8;
+export const BULLY_PUSH_DISTANCE = 8;
+export const SEGMENT_RENDER_SCALE = 1.5;
+export const RESTART_DEBOUNCE_MS = 320;
+export const APPLE_STARTLINE_AVOID_RADIUS = 140;
+export const NPC_HAZARD_LOOKAHEAD_DELTA = 0.18;
+export const NPC_BOMB_AVOID_RADIUS = 246;
+export const NPC_CACTUS_AVOID_RADIUS = 188;
+export const NPC_OIL_AVOID_RADIUS = 198;
+export const NPC_BOMB_AVOID_WEIGHT = 2.1;
+export const NPC_CACTUS_AVOID_WEIGHT = 1.62;
+export const NPC_OIL_AVOID_WEIGHT = 1.78;
+export const NPC_HAZARD_AVOID_MAX_SHIFT = 96;
+export const NPC_EDGE_CAUTION_START_RATIO = 0.58;
+export const NPC_EDGE_AVOID_LOOKAHEAD = 0.022;
+export const NPC_BENEFIT_LOOKAHEAD_DELTA = 0.34;
+export const NPC_BENEFIT_MAX_DISTANCE = 560;
+export const BODY_CROSSING_START_GRACE_MS = 1200;
+export const BODY_CROSSING_EFFECT_COOLDOWN_MS = 260;
+export const RACE_START_GHOST_MS = 900;
+export const RACE_START_LAUNCH_SPEED_FACTOR = 0.24;
+export const ALWAYS_MOVE_SNAKE_IDS = new Set(["speedster", "handler"]);
+export const ALWAYS_MOVE_MIN_SPEED = 42;
+export const ALWAYS_MOVE_OFFROAD_FACTOR = 0.72;
+export const SPEEDSTER_BLOCK_EXTRA_TURN = 0.34;
+export const SPEEDSTER_BLOCK_NUDGE = 4;
+export const SPEEDSTER_BLOCK_MAX_SHIFT = 5.2;
+export const SPEEDSTER_BLOCK_FORWARD_STEP = 4.8;
+export const STALL_CHECK_WINDOW_MS = 780;
+export const STALL_UNSTUCK_COOLDOWN_MS = 520;
+export const STALL_MOVEMENT_EPSILON_SQ = 144;
+export const STALL_PROGRESS_EPSILON = 0.0022;
+export const STALL_NO_PROGRESS_WINDOW_MS = 1350;
+export const STALL_UNSTUCK_LOOKAHEAD = 0.02;
+export const STALL_RECOVERY_STEER_GAIN = 7.2;
+export const STALL_HARD_RECOVERY_STEER_GAIN = 10.4;
+export const STALL_OUTSIDE_RECOVERY_STEER_GAIN = 5.8;
+export const STALL_UNSTUCK_GHOST_MS = 720;
+export const STALL_HARD_UNSTUCK_LOOKAHEAD = 0.036;
+export const STALL_HARD_UNSTUCK_GHOST_MS = 1100;
+export const BOMB_HIT_IMMUNITY_MS = 1200;
+export const BOMB_RECOVERY_SPEED_FACTOR = 0.26;
+export const OUTSIDE_EXTRA_SLOWDOWN = 0.46;
+export const OUTSIDE_RECOVERY_STEER_GAIN = 3.4;
+export const OUTSIDE_RECOVERY_PULL_SPEED = 56;
+export const OUTSIDE_MIN_CRAWL_SPEED = 12;
+export const FINISHED_COAST_SPEED_FACTOR = 0.2;
+export const FINISHED_COAST_STEER_GAIN = 2.1;
+export const FINISHED_COAST_LOOKAHEAD = 0.008;
+export const NO_TIME_LABEL = "--:--.---";
+export const VENOM_PROJECTILE_RADIUS = 4.5;
+export const VENOM_PROJECTILE_SPEED = 360;
+export const VENOM_PROJECTILE_HIT_RADIUS = 13;
+export const VENOM_PROJECTILE_MAX_LIFE_MS = 1800;
+export const VENOM_SLOW_BASE_DURATION_MS = 1750;
+export const RACE_COUNTDOWN_TOTAL_MS = 3000;
+export const RACE_COUNTDOWN_SECONDS = 3;
+export const COUNTDOWN_BURST_ANIM_CLASS = "countdown-burst";
+export const COUNTDOWN_COLORS = {
+  3: "#63d8ff",
+  2: "#ffd56d",
+  1: "#ff7d64",
+};
+export const TITLE_RACE_DURATION_STATS_KEY = "snake_race_duration_stats_v1";
+export const TITLE_CRAWL_DURATION_EXTRA_FACTOR = 1.12;
+export const TITLE_CRAWL_MIN_DURATION_MS = 42000;
+export const TITLE_CRAWL_MAX_DURATION_MS = 132000;
+export const TITLE_CRAWL_EMA_ALPHA = 0.24;
+export const TITLE_CRAWL_PACE_FACTOR = 0.27;
+export const TITLE_CRAWL_SIDE_PADDING = 24;
+export const TITLE_CRAWL_SLOWDOWN_FACTOR = 4;
+export const MATCH_SERVER_PORT = 2567;
+export const TITLE_REMOTE_STATS_PATH = "/local-stats/race-duration";
+export const TITLE_REMOTE_STATS_RETRY_MS = 20000;
+export const TRACK_MUSIC = {
+  canyon_loop: { key: "music_formula1", path: "assets/sounds/Formula1.mp3", volume: 0.34 },
+};
