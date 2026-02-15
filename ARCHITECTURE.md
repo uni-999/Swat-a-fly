@@ -55,8 +55,12 @@ Core modules:
 - `src/game/state.js`: shared DOM handles + mutable app state.
 
 Gameplay modules:
-- `src/game/simulation.js`: movement, anti-stall recovery, body-crossing rules, collisions.
-- `src/game/simBodySystem.js`: snake body, hunger, effects, pickups and speed-floor helpers.
+- `src/game/simulation.js`: thin facade that re-exports race simulation API.
+- `src/game/simMotion.js`: racer movement/coasting step primitives.
+- `src/game/simInteractions.js`: body-crossing rules, anti-stall recovery, racer collisions.
+- `src/game/simBodySystem.js`: thin facade that re-exports body/effect API.
+- `src/game/simBodyCore.js`: body segments, heading alignment, speed floors and effect multipliers.
+- `src/game/simItemEffects.js`: hunger ticks, pickups/body-items, effect application/removal.
 - `src/game/simProgress.js`: checkpoint progress and standings.
 - `src/game/aiSteering.js`: bot pathing/targets/avoidance and NPC control output.
 - `src/game/venomSystem.js`: venom targeting, projectile lifecycle and hit effects.
@@ -81,3 +85,5 @@ Support modules:
 - 2026-02 step-14: src/game/simProgress.js owns checkpoint progress and standings; src/game/simulation.js is now physics/collision focused.
 - 2026-02 step-15: AI split into src/game/aiSteering.js and src/game/venomSystem.js; src/game/ai.js became a composition facade.
 - 2026-02 step-16: render split into src/game/renderWorld.js and src/game/renderRacers.js; src/game/render.js now orchestrates them.
+- 2026-02 step-17: simulation internals split into src/game/simMotion.js and src/game/simInteractions.js; src/game/simulation.js became a re-export facade.
+- 2026-02 step-18: body/effects internals split into src/game/simBodyCore.js and src/game/simItemEffects.js; src/game/simBodySystem.js became a re-export facade.
