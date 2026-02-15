@@ -8,11 +8,24 @@ import {
 } from "./config.js";
 import {
   SNAKES,
+  TRACK_DEFS,
   snakeHeadTextureKey,
   snakeSegmentTextureKey,
   snakeHeadTexturePath,
   snakeSegmentTexturePath,
 } from "./catalog.js";
+import { buildTrackRuntime, sampleTrack } from "./trackMath.js";
+import { drawBackground, drawRaceWorld, ensureTrackBackdrop, hideTrackBackdrop } from "./renderWorld.js";
+import { drawRacers, syncRacerRenderSprites, syncRacerLabels } from "./renderRacers.js";
+
+const ONLINE_PROGRESS_LAP_METERS = 12000;
+const ONLINE_TRAIL_MIN_STEP = 2.5;
+const ONLINE_TRAIL_MAX_POINTS = 220;
+const ONLINE_BODY_SEGMENT_COUNT = 16;
+const ONLINE_BODY_SEGMENT_SPACING = 8.4;
+const ONLINE_LANE_OFFSETS = [-13, -5, 5, 13];
+const TRACK_DEF_BY_ID = new Map(TRACK_DEFS.map((def) => [def.id, def]));
+const ONLINE_TRACK_CACHE = new Map();
 
 export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle } = {}) {
   function initPhaser() {
@@ -26,6 +39,7 @@ export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle }
         this.headSpriteMap = new Map();
         this.segmentSpriteMap = new Map();
         this.trackMusicMap = new Map();
+        this.onlineTrailMap = new Map();
       }
 
       preload() {
