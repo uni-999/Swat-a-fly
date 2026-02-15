@@ -1,17 +1,8 @@
 import {
-  TOTAL_RACERS,
   OFFLINE_MODES,
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
-  TAU,
   STORAGE_PREFIX,
-  BODY_ITEM_COUNT,
-  START_BODY_SEGMENTS,
-  EXHAUSTION_CRAWL_THRESHOLD,
-  BODY_ITEM_MIN_SEPARATION,
-  BODY_ITEM_TO_CHECKPOINT_MIN_DIST,
-  BODY_ITEM_TO_START_CHECKPOINT_MIN_DIST,
-  BODY_ITEM_TO_PICKUP_MIN_DIST,
   RESTART_DEBOUNCE_MS,
   NO_TIME_LABEL,
   COUNTDOWN_BURST_ANIM_CLASS,
@@ -24,18 +15,16 @@ import {
   snakeSegmentTextureKey,
   snakeHeadTexturePath,
   snakeSegmentTexturePath,
-  PICKUP_ORDER,
-  NPC_PROFILES,
   TRACK_DEFS,
 } from "./src/game/catalog.js";
-import { sqrDistance, mod1 } from "./src/game/utils.js";
-import { buildTrackRuntime, sampleTrack } from "./src/game/trackMath.js";
 import { renderRace as renderRaceView, renderIdle as renderIdleView } from "./src/game/render.js";
 import { ui, state, isDebugMode, setOfflineMode, updateOfflineModeUi } from "./src/game/state.js";
 import { createRaceDurationStatsApi } from "./src/game/raceDurationStats.js";
 import { initSnakeTitleWave } from "./src/game/titleWave.js";
 import { createAiApi } from "./src/game/ai.js";
 import { createRaceFlowApi } from "./src/game/raceFlow.js";
+import { createRaceState, randomizeBodyItemPosition } from "./src/game/raceSetup.js";
+import { createHudApi } from "./src/game/hud.js";
 import {
   stepFinishedRacer,
   updatePickups,
@@ -65,6 +54,12 @@ const { buildNpcControl, maybeShootVenom, updateVenomShots } = createAiApi({
   getCurrentBodySegments,
   addEffect,
   removeEffect,
+});
+const { updateHud, formatRacerProgressLabel } = createHudApi({
+  ui,
+  computeStandings,
+  getCurrentBodySegments,
+  formatMs,
 });
 const { updateRace } = createRaceFlowApi({
   ui,
@@ -438,218 +433,6 @@ function startRace(trackId) {
   return true;
 }
 
-function createRaceState(trackDef, selectedSnake, debugMode, startMs = performance.now()) {
-  const track = buildTrackRuntime(trackDef);
-  const racers = [];
-  const slotOffsets = [-22, -8, 8, 22];
-  const selectedForProbe = selectedSnake;
-  const clockNowMs = Number.isFinite(startMs) ? startMs : performance.now();
-
-  for (let i = 0; i < TOTAL_RACERS; i += 1) {
-    const profile = NPC_PROFILES[i % NPC_PROFILES.length];
-    const snake = i === 0 ? selectedForProbe : SNAKES[(i + 1) % SNAKES.length];
-    const spawnFraction = mod1(0.992 - i * 0.008);
-    const spawn = sampleTrack(track, spawnFraction);
-    const normal = { x: -spawn.tangent.y, y: spawn.tangent.x };
-    const offset = slotOffsets[i] || 0;
-
-    const racer = {
-      id: `racer_${i + 1}`,
-      name: buildRacerDisplayName({
-        snake,
-        profile,
-        isPlayer: !debugMode && i === 0,
-        isProbe: debugMode && i === 0,
-      }),
-      typeId: snake.id,
-      color: snake.color,
-      stats: snake.stats,
-      bodyConfig: snake.body,
-      venomConfig: snake.venom,
-      baseBodySegments: START_BODY_SEGMENTS,
-      lengthBonusSegments: 0,
-      profile,
-      isPlayer: !debugMode && i === 0,
-      x: spawn.x + normal.x * offset,
-      y: spawn.y + normal.y * offset,
-      heading: Math.atan2(spawn.tangent.y, spawn.tangent.x),
-      speed: 0,
-      surface: "road",
-      shieldCharges: 0,
-      effects: [],
-      nextCheckpointIndex: 1,
-      checkpointsPassed: 0,
-      readyToFinish: false,
-      finished: false,
-      finishTimeMs: NaN,
-      completedLap: false,
-      timePenaltyMs: 0,
-      progressScore: 0,
-      trail: [],
-      history: [],
-      bodySegments: [],
-      bodyWaveSeed: Math.random() * TAU,
-      lastProjection: null,
-      impactUntilMs: 0,
-      exhaustionSteps: 0,
-      eliminationReason: null,
-      nextHungerTickMs: 0,
-      tailBiteCooldownUntilMs: 0,
-      nextBodyCrossEffectAtMs: 0,
-      stallWatch: null,
-      unstuckUntilMs: 0,
-      nextVenomShotAtMs: 0,
-      nextBombHitAllowedAtMs: 0,
-    };
-    initializeRacerBodyHistory(racer);
-    racers.push(racer);
-  }
-
-  const pickups = createPickups(track);
-  const bodyItems = createBodyItems(track, pickups);
-
-  return {
-    trackDef,
-    track,
-    racers,
-    pickups,
-    bodyItems,
-    venomShots: [],
-    phase: "countdown",
-    createdAtMs: clockNowMs,
-    countdownStartMs: clockNowMs,
-    countdownLastSecond: null,
-    raceStartMs: 0,
-    bodyCrossingGraceUntilMs: 0,
-    finishedAtMs: 0,
-    overlayUntilMs: 0,
-    focusRacerId: racers[0].id,
-    standings: [],
-    resultsPushed: false,
-  };
-}
-
-function buildRacerDisplayName({ snake, profile, isPlayer, isProbe }) {
-  const snakeToken = normalizeNameToken(snake?.id || "snake");
-  if (isPlayer) {
-    return `игрок_${snakeToken}`;
-  }
-  const profileSource = isProbe ? "проба" : profile?.name || profile?.id || "бот";
-  const profileToken = normalizeNameToken(profileSource);
-  return `бот_${profileToken}_${snakeToken}`;
-}
-
-function normalizeNameToken(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[^a-z0-9а-яё_-]/gi, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
-
-function createPickups(track) {
-  return track.pickupFractions.map((fraction, index) => {
-    const sample = sampleTrack(track, fraction);
-    const tangent = sample.tangent;
-    const normal = { x: -tangent.y, y: tangent.x };
-    const lateral = (index % 2 === 0 ? 1 : -1) * (track.roadWidth * 0.32);
-    return {
-      id: `pickup_${index + 1}`,
-      type: PICKUP_ORDER[index % PICKUP_ORDER.length],
-      x: sample.x + normal.x * lateral,
-      y: sample.y + normal.y * lateral,
-      active: true,
-      respawnAtMs: 0,
-      radius: 12,
-    };
-  });
-}
-
-function createBodyItems(track, pickups) {
-  const items = [];
-  for (let i = 0; i < BODY_ITEM_COUNT; i += 1) {
-    const item = {
-      id: `body_item_${i + 1}`,
-      type: Math.random() < 0.58 ? "APPLE" : "CACTUS",
-      x: 0,
-      y: 0,
-      radius: 11,
-      active: true,
-      respawnAtMs: 0,
-    };
-    randomizeBodyItemPosition(item, track, items, pickups);
-    items.push(item);
-  }
-  return items;
-}
-
-function randomizeBodyItemPosition(item, track, occupiedItems = [], pickups = []) {
-  let chosen = null;
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const sample = sampleTrack(track, Math.random());
-    const side = Math.random() < 0.5 ? -1 : 1;
-    const lateral = side * (Math.random() * track.roadWidth * 0.45);
-    const normal = { x: -sample.tangent.y, y: sample.tangent.x };
-    const x = sample.x + normal.x * lateral;
-    const y = sample.y + normal.y * lateral;
-    if (isBodyItemPositionValid(item, x, y, track, occupiedItems, pickups)) {
-      chosen = { x, y };
-      break;
-    }
-  }
-  if (!chosen) {
-    const sample = sampleTrack(track, Math.random());
-    const normal = { x: -sample.tangent.y, y: sample.tangent.x };
-    const side = Math.random() < 0.5 ? -1 : 1;
-    const lateral = side * (Math.random() * track.roadWidth * 0.45);
-    chosen = { x: sample.x + normal.x * lateral, y: sample.y + normal.y * lateral };
-  }
-  item.x = chosen.x;
-  item.y = chosen.y;
-  if (Math.random() < 0.35) {
-    item.type = item.type === "APPLE" ? "CACTUS" : "APPLE";
-  }
-}
-
-function isBodyItemPositionValid(item, x, y, track, occupiedItems, pickups) {
-  for (let i = 0; i < track.checkpoints.length; i += 1) {
-    const cp = track.checkpoints[i];
-    const minDist = i === 0 ? BODY_ITEM_TO_START_CHECKPOINT_MIN_DIST : BODY_ITEM_TO_CHECKPOINT_MIN_DIST;
-    if (sqrDistance(x, y, cp.x, cp.y) < minDist ** 2) {
-      return false;
-    }
-  }
-  for (const pickup of pickups) {
-    if (sqrDistance(x, y, pickup.x, pickup.y) < BODY_ITEM_TO_PICKUP_MIN_DIST ** 2) {
-      return false;
-    }
-  }
-  for (const other of occupiedItems) {
-    if (!other || other.id === item.id || !other.active) {
-      continue;
-    }
-    if (sqrDistance(x, y, other.x, other.y) < BODY_ITEM_MIN_SEPARATION ** 2) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function initializeRacerBodyHistory(racer) {
-  racer.history.length = 0;
-  const backX = -Math.cos(racer.heading);
-  const backY = -Math.sin(racer.heading);
-  for (let i = 0; i < 90; i += 1) {
-    racer.history.push({
-      x: racer.x + backX * i * 2.2,
-      y: racer.y + backY * i * 2.2,
-      heading: racer.heading,
-    });
-  }
-  racer.bodySegments.length = 0;
-}
-
 function showOverlayMessage(text, mode = "", color = null) {
   ui.overlay.textContent = text;
   ui.overlay.classList.remove("countdown", COUNTDOWN_BURST_ANIM_CLASS, "overlay-go", "overlay-finish");
@@ -675,91 +458,6 @@ function triggerCountdownBurst(value) {
 
 // -----------------------------
 // Race Loop and Simulation
-// -----------------------------
-function updateHud(race, nowMs) {
-  const standings = race.standings.length ? race.standings : computeStandings(race);
-  const focus = race.racers.find((racer) => racer.id === race.focusRacerId) || race.racers[0];
-
-  let timerMs = 0;
-  if (race.phase === "running") {
-    timerMs = focus.finished ? focus.finishTimeMs : Math.max(0, nowMs - race.raceStartMs + focus.timePenaltyMs);
-  } else if (race.phase === "finished") {
-    timerMs = focus.finishTimeMs;
-  }
-  ui.timer.textContent = Number.isFinite(timerMs) ? formatMs(timerMs) : NO_TIME_LABEL;
-
-  const kmh = Math.round(focus.speed * 1.92);
-  ui.speed.textContent = `${kmh} km/h`;
-
-  const rank = standings.findIndex((racer) => racer.id === focus.id) + 1;
-  ui.position.textContent = `P${Math.max(1, rank)}/${TOTAL_RACERS} (${focus.name})`;
-  const bodySegments = getCurrentBodySegments(focus);
-  const hungerSteps = focus.exhaustionSteps || 0;
-  const hungerLabel =
-    hungerSteps >= EXHAUSTION_CRAWL_THRESHOLD ? `голод: ${hungerSteps} (ползком)` : `голод: ${hungerSteps}`;
-  ui.effect.textContent = `${readActiveEffectLabel(focus)} | тело: ${bodySegments} | ${hungerLabel}`;
-
-  ui.standings.innerHTML = "";
-  standings.forEach((racer) => {
-    const li = document.createElement("li");
-    const tail = racer.finished ? formatRacerStandingsTail(race, racer) : "в гонке";
-    li.textContent = `${racer.name} - ${tail}`;
-    ui.standings.appendChild(li);
-  });
-}
-
-function formatRacerProgressLabel(race, racer) {
-  const checkpointsDone = Math.max(0, racer.checkpointsPassed || 0);
-  const nextIndex = Number.isFinite(racer.nextCheckpointIndex) ? racer.nextCheckpointIndex : 0;
-  const nextCheckpoint = race?.track?.checkpoints?.[nextIndex];
-  if (!nextCheckpoint) {
-    return `CP ${checkpointsDone}`;
-  }
-  const distToNext = Math.hypot(nextCheckpoint.x - racer.x, nextCheckpoint.y - racer.y);
-  return `CP ${checkpointsDone} | next ${Math.round(distToNext)}px`;
-}
-
-function formatRacerStandingsTail(race, racer) {
-  if (racer.completedLap && Number.isFinite(racer.finishTimeMs)) {
-    return formatMs(racer.finishTimeMs);
-  }
-  return formatRacerProgressLabel(race, racer);
-}
-
-function readActiveEffectLabel(racer) {
-  if (racer.finished && racer.eliminationReason) {
-    return racer.eliminationReason;
-  }
-  if (racer.shieldCharges > 0) {
-    return `Щит x${racer.shieldCharges}`;
-  }
-  if (!racer.effects.length) {
-    return "нет";
-  }
-  const top = racer.effects.reduce((acc, item) => (item.untilMs > acc.untilMs ? item : acc), racer.effects[0]);
-  if (top.type === "BOMB_SLOW") {
-    return "Бомба: замедление";
-  }
-  if (top.type === "BOOST") {
-    return "Ускорение";
-  }
-  if (top.type === "APPLE_BOOST") {
-    return "Яблочный рывок";
-  }
-  if (top.type === "OIL") {
-    return "Масло";
-  }
-  if (top.type === "VENOM_SLOW") {
-    return "Яд";
-  }
-  if (top.type === "SHIELD") {
-    return "Щит";
-  }
-  return top.type;
-}
-
-// -----------------------------
-// Rendering
 // -----------------------------
 function renderRace(scene, race, nowMs) {
   return renderRaceView(scene, race, nowMs, { formatMs, getRacerMotionHeading });

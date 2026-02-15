@@ -265,3 +265,5 @@ npx serve . -l 5500
 - 2026-02: Frontend step-4 modularization done: NPC autopilot + venom combat logic moved to `src/game/ai.js` and wired back into `script.js` via dependency-injected API.
 - 2026-02: Frontend step-5 modularization done: core race simulation (movement/effects/collisions/checkpoint progress helpers) moved to `src/game/simulation.js`; `script.js` keeps orchestration/UI flow.
 - 2026-02: Frontend step-6 modularization done: race flow orchestration (`updateRace`, countdown/finish transitions, results finalization, player controls) moved to `src/game/raceFlow.js` via `createRaceFlowApi`.
+- 2026-02: Frontend step-7 modularization done: race/session setup and object spawning moved to `src/game/raceSetup.js` (`createRaceState`, pickups/body-items generation, spawn validation, racer naming/history init).
+- 2026-02: Frontend step-8 modularization done: HUD rendering/labels moved to `src/game/hud.js` (`updateHud`, progress labels, active effect labels).
