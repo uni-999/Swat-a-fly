@@ -261,3 +261,4 @@ npx serve . -l 5500
 - 2026-02: Anti-stall was switched to soft recovery without coordinate snaps: no direct x/y teleports, only steering + speed recovery + ghost window.
 - 2026-02: Frontend step-1 modularization done: shared constants moved to `src/game/config.js`, catalogs to `src/game/catalog.js`, and math helpers to `src/game/utils.js`.
 - 2026-02: Frontend step-2 modularization done: rendering moved to `src/game/render.js`, and track geometry/projection moved to `src/game/trackMath.js`.
+- 2026-02: Frontend step-3 modularization done: UI/global app state moved to `src/game/state.js`, race-duration/title-crawl stats moved to `src/game/raceDurationStats.js`, and title wave animation moved to `src/game/titleWave.js`.
