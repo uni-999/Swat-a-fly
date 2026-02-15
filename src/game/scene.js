@@ -21,7 +21,7 @@ import { drawRacers, syncRacerRenderSprites, syncRacerLabels } from "./renderRac
 const ONLINE_PROGRESS_LAP_METERS = 12000;
 const ONLINE_TRAIL_MIN_STEP = 2.5;
 const ONLINE_TRAIL_MAX_POINTS = 220;
-const ONLINE_BODY_SEGMENT_COUNT = 16;
+const ONLINE_BODY_SEGMENT_COUNT = 10;
 const ONLINE_BODY_SEGMENT_SPACING = 8.4;
 const ONLINE_LANE_OFFSETS = [-13, -5, 5, 13];
 const TRACK_DEF_BY_ID = new Map(TRACK_DEFS.map((def) => [def.id, def]));
@@ -437,7 +437,7 @@ function pruneOnlineTrails(scene, onlineRacers) {
 }
 
 function buildOnlineBodySegmentsFromTrail(trail, fallbackHeading) {
-  if (!Array.isArray(trail) || trail.length < 2) {
+  if (!Array.isArray(trail) || !trail.length) {
     return [];
   }
 
@@ -474,6 +474,25 @@ function buildOnlineBodySegmentsFromTrail(trail, fallbackHeading) {
 
     consumedDistance += len;
     newer = older;
+  }
+
+  const tailAnchor = segments[segments.length - 1] || {
+    x: trail[0].x,
+    y: trail[0].y,
+    heading: fallbackHeading || trail[trail.length - 1].heading || 0,
+    radius: 3,
+    alpha: 0.2,
+  };
+
+  while (segments.length < ONLINE_BODY_SEGMENT_COUNT) {
+    const ratio = segments.length / Math.max(1, ONLINE_BODY_SEGMENT_COUNT - 1);
+    segments.push({
+      x: tailAnchor.x,
+      y: tailAnchor.y,
+      heading: tailAnchor.heading,
+      radius: Math.max(2.8, 5.8 - ratio * 2.5),
+      alpha: Math.max(0.2, 0.88 - ratio * 0.55),
+    });
   }
 
   return segments;
