@@ -143,7 +143,9 @@ export function createUiFlowApi({
     if (!ui.onlineRoomPicker) {
       return;
     }
-    ui.onlineRoomPicker.hidden = !(state.playMode === "online" && state.currentScreen === "track");
+    const visible = state.playMode === "online" && state.currentScreen === "track";
+    ui.onlineRoomPicker.hidden = !visible;
+    ui.onlineRoomPicker.style.display = visible ? "" : "none";
   }
 
   function getResolvedOnlineRoomId() {

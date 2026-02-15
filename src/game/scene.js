@@ -39,6 +39,9 @@ const ONLINE_HEADING_SMOOTH_GAIN = 14;
 const ONLINE_POSE_TELEPORT_DIST = 160;
 const ONLINE_POSE_PREDICTION_MAX_SEC = 0.18;
 const TRACK_DEF_BY_ID = new Map(TRACK_DEFS.map((def) => [def.id, def]));
+const TRACK_DEF_BY_NORMALIZED_ID = new Map(
+  TRACK_DEFS.map((def) => [normalizeTrackIdValue(def.id), def])
+);
 const ONLINE_TRACK_CACHE = new Map();
 
 export function createSceneApi({ ui, state, updateRace, renderRace, renderIdle } = {}) {
@@ -276,7 +279,7 @@ function renderOnlineSnapshot(scene, onlineState, nowMs, renderIdle) {
   const g = scene.graphics;
   const snapshot = onlineState?.snapshot || null;
   const status = onlineState?.status || "idle";
-  const trackId = snapshot?.trackId || onlineState?.trackId || "canyon_loop";
+  const trackId = normalizeTrackIdValue(snapshot?.trackId || onlineState?.trackId || "canyon_loop");
   const onlineTrack = resolveOnlineTrack(trackId);
 
   if (onlineTrack) {
@@ -336,15 +339,16 @@ function renderOnlineSnapshot(scene, onlineState, nowMs, renderIdle) {
 }
 
 function resolveOnlineTrack(trackId) {
-  if (!trackId) {
+  const normalizedTrackId = normalizeTrackIdValue(trackId);
+  if (!normalizedTrackId) {
     return null;
   }
-  const cached = ONLINE_TRACK_CACHE.get(trackId);
+  const cached = ONLINE_TRACK_CACHE.get(normalizedTrackId);
   if (cached) {
     return cached;
   }
 
-  const trackDef = TRACK_DEF_BY_ID.get(trackId);
+  const trackDef = TRACK_DEF_BY_ID.get(normalizedTrackId) || TRACK_DEF_BY_NORMALIZED_ID.get(normalizedTrackId) || null;
   if (!trackDef) {
     return null;
   }
@@ -360,8 +364,15 @@ function resolveOnlineTrack(trackId) {
     venomShots: [],
   };
   const built = { trackDef, runtime, raceView };
-  ONLINE_TRACK_CACHE.set(trackId, built);
+  ONLINE_TRACK_CACHE.set(normalizedTrackId, built);
   return built;
+}
+
+function normalizeTrackIdValue(trackId) {
+  return String(trackId || "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_");
 }
 
 function createOnlinePickups(track) {

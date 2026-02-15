@@ -1,7 +1,7 @@
 ﻿import { MATCH_SERVER_PORT } from "./config.js";
 
 const COLYSEUS_ESM_URL = "https://cdn.jsdelivr.net/npm/colyseus.js@0.16.17/+esm";
-const LOCAL_COLYSEUS_SCRIPT_PATH = "assets/vendor/colyseus.js";
+const LOCAL_COLYSEUS_SCRIPT_PATH = "/assets/vendor/colyseus.js";
 const ONLINE_USER_ID_KEY = "snake_online_user_id_v1";
 const ONLINE_PING_INTERVAL_MS = 4000;
 const MATCH_PROXY_PATH = "/match/";
@@ -43,22 +43,26 @@ export function createOnlineRoomClientApi({ state } = {}) {
     if (typeof window !== "undefined" && window.Colyseus?.Client) {
       return window.Colyseus;
     }
-    try {
-      await loadColyseusScriptTag();
-      if (typeof window !== "undefined" && window.Colyseus?.Client) {
-        return window.Colyseus;
-      }
-    } catch (error) {
-      // Fall back to ESM import if script loading fails.
-    }
+
+    // Prefer modern ESM build first to avoid incompatibilities from stale global scripts.
     if (!colyseusModulePromise) {
       colyseusModulePromise = import(COLYSEUS_ESM_URL).catch((error) => {
         colyseusModulePromise = null;
         throw error;
       });
     }
-    const imported = await colyseusModulePromise;
-    return imported?.Client ? imported : imported?.default?.Client ? imported.default : imported;
+    try {
+      const imported = await colyseusModulePromise;
+      return imported?.Client ? imported : imported?.default?.Client ? imported.default : imported;
+    } catch (error) {
+      // Fall through to script tag fallback.
+    }
+
+    await loadColyseusScriptTag();
+    if (typeof window !== "undefined" && window.Colyseus?.Client) {
+      return window.Colyseus;
+    }
+    throw new Error("colyseus_client_load_failed");
   }
 
   function getMatchServerWsCandidates() {
@@ -118,6 +122,120 @@ export function createOnlineRoomClientApi({ state } = {}) {
     } catch (error) {
       return "";
     }
+  }
+
+  function makeRoomsApiUrl(httpBase, trackId = "") {
+    if (!httpBase) {
+      return "";
+    }
+    try {
+      const baseWithSlash = `${httpBase.replace(/\/+$/, "")}/`;
+      const url = new URL("rooms/race", baseWithSlash);
+      const normalizedTrackId = String(trackId || "").trim();
+      if (normalizedTrackId) {
+        url.searchParams.set("trackId", normalizedTrackId);
+      }
+      return url.toString();
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function getRoomsHttpCandidates(trackId = "") {
+    const candidates = [];
+    const push = (url) => {
+      if (!url || candidates.includes(url)) {
+        return;
+      }
+      candidates.push(url);
+    };
+
+    if (typeof window !== "undefined" && window.location?.origin) {
+      push(makeRoomsApiUrl(`${window.location.origin}${MATCH_PROXY_PATH}`, trackId));
+    }
+
+    for (const wsEndpoint of getMatchServerWsCandidates()) {
+      const httpBase = toHttpEndpoint(wsEndpoint);
+      push(makeRoomsApiUrl(httpBase, trackId));
+    }
+
+    return candidates;
+  }
+
+  async function tryListRoomsViaHttp(trackId = "") {
+    const candidates = getRoomsHttpCandidates(trackId);
+    let lastError = null;
+
+    for (const endpoint of candidates) {
+      if (!endpoint) {
+        continue;
+      }
+      try {
+        const response = await fetch(endpoint, {
+          method: "GET",
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) {
+          lastError = new Error(`room_listing_http_${response.status}`);
+          continue;
+        }
+        const payload = await response.json();
+        const rooms = Array.isArray(payload?.rooms) ? payload.rooms : [];
+        return {
+          ok: true,
+          endpoint,
+          rooms,
+        };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    return {
+      ok: false,
+      error: lastError?.message || "room_listing_http_unavailable",
+      endpoint: null,
+      rooms: [],
+    };
+  }
+
+  function normalizeListedRooms(rooms, preferredTrackId = "") {
+    const preferred = String(preferredTrackId || "").trim();
+    return (Array.isArray(rooms) ? rooms : [])
+      .map((room) => {
+        const metadata = room?.metadata && typeof room.metadata === "object" ? room.metadata : {};
+        const roomTrackId =
+          typeof metadata.trackId === "string"
+            ? metadata.trackId
+            : typeof room?.trackId === "string"
+            ? room.trackId
+            : null;
+        const phase =
+          typeof metadata.phase === "string"
+            ? metadata.phase
+            : typeof room?.phase === "string"
+            ? room.phase
+            : null;
+        const clients = Number(room?.clients ?? room?.clientsCount ?? 0);
+        const maxClients = Number(room?.maxClients ?? 0);
+        return {
+          roomId: String(room?.roomId || ""),
+          trackId: roomTrackId,
+          phase,
+          clients: Number.isFinite(clients) ? clients : 0,
+          maxClients: Number.isFinite(maxClients) ? maxClients : 0,
+          locked: Boolean(room?.locked),
+        };
+      })
+      .filter((room) => room.roomId)
+      .sort((a, b) => {
+        const aPreferred = preferred && a.trackId === preferred ? 1 : 0;
+        const bPreferred = preferred && b.trackId === preferred ? 1 : 0;
+        if (aPreferred !== bPreferred) {
+          return bPreferred - aPreferred;
+        }
+        return b.clients - a.clients || a.roomId.localeCompare(b.roomId);
+      });
   }
 
   function clearOnlinePingTimer() {
@@ -284,6 +402,16 @@ export function createOnlineRoomClientApi({ state } = {}) {
 
   async function listOnlineRooms({ trackId = null } = {}) {
     const preferredTrackId = typeof trackId === "string" ? trackId.trim() : "";
+
+    const httpResult = await tryListRoomsViaHttp(preferredTrackId);
+    if (httpResult.ok) {
+      return {
+        ok: true,
+        endpoint: httpResult.endpoint,
+        rooms: normalizeListedRooms(httpResult.rooms, preferredTrackId),
+      };
+    }
+
     try {
       const colyseus = await loadColyseusClientModule();
       const endpointCandidates = getMatchServerWsCandidates();
@@ -292,63 +420,11 @@ export function createOnlineRoomClientApi({ state } = {}) {
       for (const endpoint of endpointCandidates) {
         try {
           const client = new colyseus.Client(endpoint);
-          let rooms = [];
-
-          if (typeof client.getAvailableRooms === "function") {
-            rooms = await client.getAvailableRooms("race");
-          } else {
-            const httpBase = toHttpEndpoint(endpoint);
-            if (!httpBase) {
-              throw new Error("room_listing_unsupported_by_client");
-            }
-            const baseWithSlash = `${httpBase}/`;
-            const roomsUrl = new URL("rooms/race", baseWithSlash);
-            const response = await fetch(roomsUrl.toString(), {
-              method: "GET",
-              headers: { Accept: "application/json" },
-            });
-            if (!response.ok) {
-              throw new Error(`room_listing_http_${response.status}`);
-            }
-            const payload = await response.json();
-            rooms = Array.isArray(payload?.rooms) ? payload.rooms : [];
+          if (typeof client.getAvailableRooms !== "function") {
+            throw new Error("room_listing_unsupported_by_client");
           }
-
-          const normalized = (Array.isArray(rooms) ? rooms : [])
-            .map((room) => {
-              const metadata = room?.metadata && typeof room.metadata === "object" ? room.metadata : {};
-              const roomTrackId =
-                typeof metadata.trackId === "string"
-                  ? metadata.trackId
-                  : typeof room?.trackId === "string"
-                  ? room.trackId
-                  : null;
-              const phase =
-                typeof metadata.phase === "string"
-                  ? metadata.phase
-                  : typeof room?.phase === "string"
-                  ? room.phase
-                  : null;
-              const clients = Number(room?.clients ?? room?.clientsCount ?? 0);
-              const maxClients = Number(room?.maxClients ?? 0);
-              return {
-                roomId: String(room?.roomId || ""),
-                trackId: roomTrackId,
-                phase,
-                clients: Number.isFinite(clients) ? clients : 0,
-                maxClients: Number.isFinite(maxClients) ? maxClients : 0,
-                locked: Boolean(room?.locked),
-              };
-            })
-            .filter((room) => room.roomId)
-            .sort((a, b) => {
-              const aPreferred = preferredTrackId && a.trackId === preferredTrackId ? 1 : 0;
-              const bPreferred = preferredTrackId && b.trackId === preferredTrackId ? 1 : 0;
-              if (aPreferred !== bPreferred) {
-                return bPreferred - aPreferred;
-              }
-              return b.clients - a.clients || a.roomId.localeCompare(b.roomId);
-            });
+          const rooms = await client.getAvailableRooms("race");
+          const normalized = normalizeListedRooms(rooms, preferredTrackId);
 
           return {
             ok: true,
@@ -364,17 +440,7 @@ export function createOnlineRoomClientApi({ state } = {}) {
     } catch (error) {
       const unsupported =
         typeof error?.message === "string" && error.message.includes("room_listing_unsupported_by_client");
-      const roomsApiMissing =
-        typeof error?.message === "string" &&
-        (error.message.includes("room_listing_http_404") || error.message.includes("room_listing_http_405"));
       if (unsupported) {
-        return {
-          ok: true,
-          rooms: [],
-          endpoint: null,
-        };
-      }
-      if (roomsApiMissing) {
         return {
           ok: true,
           rooms: [],

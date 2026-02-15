@@ -318,3 +318,6 @@ npx serve . -l 5500
 - 2026-02: Online room-list UX fix: список комнат больше не скрывает комнаты «другой» трассы; текущая выбранная трасса только приоритизируется в сортировке.
 - 2026-02: Asset path robustness fix: пути к спрайтам/музыке/бэкдропам/тайлам переведены на абсолютные (`/assets/...`), чтобы рендер трассы и змей корректно работал на прод-доменах и при любых текущих URL.
 - 2026-02: Infra logging fix: в `infra/web/nginx.conf` добавлен `log_format docker_realip`, вывод access/error логов в stdout/stderr контейнера и извлечение реального IP из `X-Forwarded-For` (с `real_ip_recursive` и доверенными private-сетями), чтобы в `docker logs` видеть адреса клиентов.
+- 2026-02: Online/offline UI fix: room picker is now force-hidden outside online track screen (`[hidden] { display: none !important; }` + runtime `display:none` guard in `src/game/uiFlow.js`).
+- 2026-02: Online room listing hardening: client now requests `GET /match/rooms/race` first and only falls back to `client.getAvailableRooms("race")` for compatibility (`src/game/onlineRoomClient.js`).
+- 2026-02: Online track render hardening: `trackId` is normalized (`-` -> `_`, lowercase) before runtime lookup, so online map does not disappear on id format mismatch (`src/game/scene.js`).
