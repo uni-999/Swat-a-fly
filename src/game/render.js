@@ -1,4 +1,4 @@
-import {
+﻿import {
   drawBackground,
   drawRaceWorld,
   ensureTrackBackdrop,
@@ -18,12 +18,12 @@ export function renderRace(scene, race, nowMs, helpers = {}) {
   syncRacerRenderSprites(scene, race.racers, true, getRacerMotionHeading);
   syncRacerLabels(scene, race.racers, true);
 
-  const phaseText = race.phase === "countdown" ? "РћС‚СЃС‡РµС‚" : race.phase === "running" ? "Р“РѕРЅРєР°" : "Р¤РёРЅРёС€";
+  const phaseText = race.phase === "countdown" ? "Отсчёт" : race.phase === "running" ? "Гонка" : "Финиш";
   scene.infoText.setVisible(true);
   scene.infoText.setText([
-    `РўСЂР°СЃСЃР°: ${race.trackDef.name}`,
-    `Р¤Р°Р·Р°: ${phaseText}`,
-    `Р’СЂРµРјСЏ: ${formatMs(Math.max(0, nowMs - race.raceStartMs))}`,
+    `Трасса: ${race.trackDef.name}`,
+    `Фаза: ${phaseText}`,
+    `Время: ${formatMs(Math.max(0, nowMs - race.raceStartMs))}`,
   ]);
 }
 
