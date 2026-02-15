@@ -1,0 +1,4 @@
+half_width_median=38.01
+half_width_p50=38.01
+half_width_p60=38.30
+suggested_roadWidth=38

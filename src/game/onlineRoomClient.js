@@ -3,6 +3,7 @@
 const COLYSEUS_ESM_URL = "https://cdn.jsdelivr.net/npm/colyseus.js@0.16.17/+esm";
 const ONLINE_USER_ID_KEY = "snake_online_user_id_v1";
 const ONLINE_PING_INTERVAL_MS = 4000;
+const MATCH_PROXY_PATH = "/match";
 
 export function createOnlineRoomClientApi({ state } = {}) {
   let colyseusModulePromise = null;
@@ -20,10 +21,27 @@ export function createOnlineRoomClientApi({ state } = {}) {
     return colyseusModulePromise;
   }
 
-  function getMatchServerWsUrl() {
+  function getMatchServerWsCandidates() {
     const secure = typeof window !== "undefined" && window.location?.protocol === "https:";
+    const protocol = secure ? "wss" : "ws";
+    const hostWithPort = typeof window !== "undefined" && window.location?.host ? window.location.host : "";
     const host = typeof window !== "undefined" && window.location?.hostname ? window.location.hostname : "localhost";
-    return `${secure ? "wss" : "ws"}://${host}:${MATCH_SERVER_PORT}`;
+    const isLocalHost = host === "localhost" || host === "127.0.0.1";
+    const fromGlobal =
+      typeof window !== "undefined" && typeof window.__POLZUNKI_MATCH_WS_URL__ === "string"
+        ? window.__POLZUNKI_MATCH_WS_URL__.trim()
+        : "";
+    const sameOriginProxy = hostWithPort ? `${protocol}://${hostWithPort}${MATCH_PROXY_PATH}` : "";
+    const directPort = `${protocol}://${host}:${MATCH_SERVER_PORT}`;
+    const seen = new Set();
+    const autoCandidates = isLocalHost ? [directPort, sameOriginProxy] : [sameOriginProxy, directPort];
+    return [fromGlobal, ...autoCandidates].filter((url) => {
+      if (!url || seen.has(url)) {
+        return false;
+      }
+      seen.add(url);
+      return true;
+    });
   }
 
   function ensureOnlineUserId() {
@@ -67,6 +85,7 @@ export function createOnlineRoomClientApi({ state } = {}) {
       room: null,
       roomId: null,
       sessionId: null,
+      endpoint: null,
       trackId: null,
       snapshot: null,
       lastSnapshotAtMs: 0,
@@ -96,6 +115,7 @@ export function createOnlineRoomClientApi({ state } = {}) {
       room: null,
       roomId: null,
       sessionId: null,
+      endpoint: null,
       trackId,
       snapshot: null,
       lastSnapshotAtMs: 0,
@@ -107,17 +127,42 @@ export function createOnlineRoomClientApi({ state } = {}) {
 
     try {
       const colyseus = await loadColyseusClientModule();
-      const client = new colyseus.Client(getMatchServerWsUrl());
-      const room = await client.joinOrCreate("race", {
-        trackId,
-        userId: onlineUserId,
-        name: playerName,
-      });
+      let client = null;
+      let room = null;
+      let endpoint = null;
+      let lastError = null;
+      const endpointCandidates = getMatchServerWsCandidates();
+
+      for (const candidate of endpointCandidates) {
+        try {
+          client = new colyseus.Client(candidate);
+          room = await client.joinOrCreate("race", {
+            trackId,
+            userId: onlineUserId,
+            name: playerName,
+          });
+          endpoint = candidate;
+          break;
+        } catch (error) {
+          lastError = error;
+          try {
+            client?.connection?.close?.();
+          } catch (closeError) {
+            // Ignore close failures while trying fallback endpoint.
+          }
+          client = null;
+          room = null;
+        }
+      }
+      if (!client || !room) {
+        throw lastError || new Error("match_server_unreachable");
+      }
 
       state.online.client = client;
       state.online.room = room;
       state.online.roomId = room.roomId || null;
       state.online.sessionId = room.sessionId || null;
+      state.online.endpoint = endpoint;
       state.online.status = "connected";
 
       room.onMessage("snapshot", (snapshot) => {
@@ -161,6 +206,7 @@ export function createOnlineRoomClientApi({ state } = {}) {
         ok: true,
         roomId: state.online.roomId,
         sessionId: state.online.sessionId,
+        endpoint: state.online.endpoint,
       };
     } catch (error) {
       state.online.status = "error";

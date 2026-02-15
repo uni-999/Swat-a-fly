@@ -44,6 +44,7 @@ export const state = {
     room: null,
     roomId: null,
     sessionId: null,
+    endpoint: null,
     trackId: null,
     snapshot: null,
     lastSnapshotAtMs: 0,

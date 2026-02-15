@@ -233,6 +233,7 @@ function renderOnlineSnapshot(scene, onlineState, nowMs, renderIdle) {
     scene.infoText.setText([
       `Онлайн: ${status}`,
       onlineState?.roomId ? `Комната: ${onlineState.roomId}` : "Подключение к комнате...",
+      onlineState?.endpoint ? `Endpoint: ${onlineState.endpoint}` : "Endpoint: -",
       Number.isFinite(onlineState?.latencyMs) ? `RTT: ${Math.round(onlineState.latencyMs)} ms` : "RTT: -",
       `Время: ${Math.round(nowMs)} ms`,
     ]);
@@ -270,6 +271,7 @@ function renderOnlineSnapshot(scene, onlineState, nowMs, renderIdle) {
   scene.infoText.setText([
     `Онлайн комната: ${snapshot.roomId || onlineState?.roomId || "-"}`,
     `Фаза: ${phase} | ${latencyLine}`,
+    onlineState?.endpoint ? `Endpoint: ${onlineState.endpoint}` : "Endpoint: -",
     ...topRows,
   ]);
 }

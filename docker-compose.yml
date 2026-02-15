@@ -20,7 +20,7 @@ services:
       PORT: "2567"
       SERVER_TICK_RATE: "20"
       RACE_MAX_MS: "180000"
-      NAKAMA_URL: "http://nakama:7350"
+      NAKAMA_URL: "${NAKAMA_URL:-}"
       NAKAMA_HTTP_KEY: "${NAKAMA_HTTP_KEY:-dev-http-key}"
       NAKAMA_RPC_ID: "submit_race_time"
       RACE_DURATION_STATS_FILE: "/app/_data/race-duration-stats.json"
@@ -29,8 +29,6 @@ services:
       - "./_data/match-server:/app/_data"
     ports:
       - "2567:2567"
-    depends_on:
-      - nakama
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:2567/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]

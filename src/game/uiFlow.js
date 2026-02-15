@@ -324,7 +324,8 @@ export function createUiFlowApi({
       }
 
       syncRaceMusic();
-      showToast(`Онлайн: подключено к комнате ${connectResult.roomId || "-"}.`);
+      const endpointLabel = connectResult.endpoint ? ` (${connectResult.endpoint})` : "";
+      showToast(`Онлайн: подключено к комнате ${connectResult.roomId || "-"}${endpointLabel}.`);
       pushOnlineInput();
       return true;
     }
