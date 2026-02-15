@@ -263,3 +263,4 @@ npx serve . -l 5500
 - 2026-02: Frontend step-2 modularization done: rendering moved to `src/game/render.js`, and track geometry/projection moved to `src/game/trackMath.js`.
 - 2026-02: Frontend step-3 modularization done: UI/global app state moved to `src/game/state.js`, race-duration/title-crawl stats moved to `src/game/raceDurationStats.js`, and title wave animation moved to `src/game/titleWave.js`.
 - 2026-02: Frontend step-4 modularization done: NPC autopilot + venom combat logic moved to `src/game/ai.js` and wired back into `script.js` via dependency-injected API.
+- 2026-02: Frontend step-5 modularization done: core race simulation (movement/effects/collisions/checkpoint progress helpers) moved to `src/game/simulation.js`; `script.js` keeps orchestration/UI flow.
