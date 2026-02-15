@@ -291,11 +291,12 @@ function renderOnlineSnapshot(scene, onlineState, nowMs, renderIdle) {
   const status = onlineState?.status || "idle";
   const trackId = normalizeTrackIdValue(snapshot?.trackId || onlineState?.trackId || "canyon_loop");
   const onlineTrack = resolveOnlineTrack(trackId);
+  const onlineRaceView = buildOnlineRaceViewFromSnapshot(onlineTrack, snapshot);
 
-  if (onlineTrack) {
-    const hasTrackBackdrop = ensureTrackBackdrop(scene, onlineTrack.raceView);
+  if (onlineRaceView) {
+    const hasTrackBackdrop = ensureTrackBackdrop(scene, onlineRaceView);
     drawBackground(g, { skipBase: hasTrackBackdrop });
-    drawRaceWorld(scene, g, onlineTrack.raceView, { skipTrack: hasTrackBackdrop });
+    drawRaceWorld(scene, g, onlineRaceView, { skipTrack: hasTrackBackdrop });
   } else {
     renderIdle(scene);
   }
@@ -386,6 +387,34 @@ function normalizeTrackIdValue(trackId) {
     .trim()
     .toLowerCase()
     .replace(/-/g, "_");
+}
+
+function buildOnlineRaceViewFromSnapshot(onlineTrack, snapshot) {
+  if (!onlineTrack?.raceView) {
+    return null;
+  }
+  const baseView = onlineTrack.raceView;
+  const snapshotPickups = normalizeOnlineObjects(snapshot?.pickups, baseView.pickups);
+  const snapshotBodyItems = normalizeOnlineObjects(snapshot?.bodyItems, baseView.bodyItems);
+  return {
+    ...baseView,
+    pickups: snapshotPickups,
+    bodyItems: snapshotBodyItems,
+  };
+}
+
+function normalizeOnlineObjects(snapshotList, fallbackList) {
+  if (!Array.isArray(snapshotList) || !snapshotList.length) {
+    return Array.isArray(fallbackList) ? fallbackList : [];
+  }
+  return snapshotList.map((item, index) => ({
+    id: String(item?.id || `online_obj_${index + 1}`),
+    type: String(item?.type || "APPLE"),
+    x: Number.isFinite(Number(item?.x)) ? Number(item.x) : 0,
+    y: Number.isFinite(Number(item?.y)) ? Number(item.y) : 0,
+    active: item?.active !== false,
+    radius: Number.isFinite(Number(item?.radius)) ? Number(item.radius) : 12,
+  }));
 }
 
 function createOnlinePickups(track) {
