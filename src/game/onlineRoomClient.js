@@ -1,16 +1,55 @@
 ﻿import { MATCH_SERVER_PORT } from "./config.js";
 
 const COLYSEUS_ESM_URL = "https://cdn.jsdelivr.net/npm/colyseus.js@0.16.17/+esm";
+const LOCAL_COLYSEUS_SCRIPT_PATH = "assets/vendor/colyseus.js";
 const ONLINE_USER_ID_KEY = "snake_online_user_id_v1";
 const ONLINE_PING_INTERVAL_MS = 4000;
 const MATCH_PROXY_PATH = "/match/";
 
 export function createOnlineRoomClientApi({ state } = {}) {
   let colyseusModulePromise = null;
+  let colyseusScriptLoadPromise = null;
+
+  function loadColyseusScriptTag() {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return Promise.resolve(false);
+    }
+    if (window.Colyseus?.Client) {
+      return Promise.resolve(true);
+    }
+    if (!colyseusScriptLoadPromise) {
+      colyseusScriptLoadPromise = new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[src="${LOCAL_COLYSEUS_SCRIPT_PATH}"]`);
+        if (existing) {
+          existing.addEventListener("load", () => resolve(Boolean(window.Colyseus?.Client)), { once: true });
+          existing.addEventListener("error", () => reject(new Error("colyseus_script_load_failed")), { once: true });
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = LOCAL_COLYSEUS_SCRIPT_PATH;
+        script.async = true;
+        script.onload = () => resolve(Boolean(window.Colyseus?.Client));
+        script.onerror = () => reject(new Error("colyseus_script_load_failed"));
+        document.head.appendChild(script);
+      }).catch((error) => {
+        colyseusScriptLoadPromise = null;
+        throw error;
+      });
+    }
+    return colyseusScriptLoadPromise;
+  }
 
   async function loadColyseusClientModule() {
     if (typeof window !== "undefined" && window.Colyseus?.Client) {
       return window.Colyseus;
+    }
+    try {
+      await loadColyseusScriptTag();
+      if (typeof window !== "undefined" && window.Colyseus?.Client) {
+        return window.Colyseus;
+      }
+    } catch (error) {
+      // Fall back to ESM import if script loading fails.
     }
     if (!colyseusModulePromise) {
       colyseusModulePromise = import(COLYSEUS_ESM_URL).catch((error) => {
@@ -18,7 +57,8 @@ export function createOnlineRoomClientApi({ state } = {}) {
         throw error;
       });
     }
-    return colyseusModulePromise;
+    const imported = await colyseusModulePromise;
+    return imported?.Client ? imported : imported?.default?.Client ? imported.default : imported;
   }
 
   function getMatchServerWsCandidates() {
