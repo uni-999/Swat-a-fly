@@ -5,8 +5,8 @@ export const BODY_ITEMS = {
   APPLE: { color: "#ff5f6a", deltaSegments: 1 },
   CACTUS: { color: "#4fd17b", deltaSegments: -1 },
 };
-export const SNAKE_SPRITES_BASE_PATH = "assets/sprites/snakes";
-export const ITEM_SPRITES_BASE_PATH = "assets/sprites/items";
+export const SNAKE_SPRITES_BASE_PATH = "/assets/sprites/snakes";
+export const ITEM_SPRITES_BASE_PATH = "/assets/sprites/items";
 export const ITEM_SPRITES = {
   BOOST: { key: "item_boost", path: `${ITEM_SPRITES_BASE_PATH}/boost.png` },
   SHIELD: { key: "item_shield", path: `${ITEM_SPRITES_BASE_PATH}/shield.png` },

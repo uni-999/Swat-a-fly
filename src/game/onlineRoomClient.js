@@ -106,6 +106,20 @@ export function createOnlineRoomClientApi({ state } = {}) {
     return value.slice(0, 64);
   }
 
+  function toHttpEndpoint(wsEndpoint) {
+    const source = String(wsEndpoint || "").trim();
+    if (!source) {
+      return "";
+    }
+    try {
+      const parsed = new URL(source);
+      parsed.protocol = parsed.protocol === "wss:" ? "https:" : "http:";
+      return parsed.toString().replace(/\/+$/, "");
+    } catch (error) {
+      return "";
+    }
+  }
+
   function clearOnlinePingTimer() {
     if (state.online?.pingTimerId) {
       clearInterval(state.online.pingTimerId);
@@ -269,7 +283,7 @@ export function createOnlineRoomClientApi({ state } = {}) {
   }
 
   async function listOnlineRooms({ trackId = null } = {}) {
-    const resolvedTrackId = typeof trackId === "string" ? trackId.trim() : "";
+    const preferredTrackId = typeof trackId === "string" ? trackId.trim() : "";
     try {
       const colyseus = await loadColyseusClientModule();
       const endpointCandidates = getMatchServerWsCandidates();
@@ -278,33 +292,63 @@ export function createOnlineRoomClientApi({ state } = {}) {
       for (const endpoint of endpointCandidates) {
         try {
           const client = new colyseus.Client(endpoint);
-          if (typeof client.getAvailableRooms !== "function") {
-            throw new Error("room_listing_unsupported_by_client");
+          let rooms = [];
+
+          if (typeof client.getAvailableRooms === "function") {
+            rooms = await client.getAvailableRooms("race");
+          } else {
+            const httpBase = toHttpEndpoint(endpoint);
+            if (!httpBase) {
+              throw new Error("room_listing_unsupported_by_client");
+            }
+            const baseWithSlash = `${httpBase}/`;
+            const roomsUrl = new URL("rooms/race", baseWithSlash);
+            const response = await fetch(roomsUrl.toString(), {
+              method: "GET",
+              headers: { Accept: "application/json" },
+            });
+            if (!response.ok) {
+              throw new Error(`room_listing_http_${response.status}`);
+            }
+            const payload = await response.json();
+            rooms = Array.isArray(payload?.rooms) ? payload.rooms : [];
           }
-          const rooms = await client.getAvailableRooms("race");
+
           const normalized = (Array.isArray(rooms) ? rooms : [])
             .map((room) => {
               const metadata = room?.metadata && typeof room.metadata === "object" ? room.metadata : {};
-              const roomTrackId = typeof metadata.trackId === "string" ? metadata.trackId : null;
+              const roomTrackId =
+                typeof metadata.trackId === "string"
+                  ? metadata.trackId
+                  : typeof room?.trackId === "string"
+                  ? room.trackId
+                  : null;
+              const phase =
+                typeof metadata.phase === "string"
+                  ? metadata.phase
+                  : typeof room?.phase === "string"
+                  ? room.phase
+                  : null;
               const clients = Number(room?.clients ?? room?.clientsCount ?? 0);
               const maxClients = Number(room?.maxClients ?? 0);
               return {
                 roomId: String(room?.roomId || ""),
                 trackId: roomTrackId,
-                phase: typeof metadata.phase === "string" ? metadata.phase : null,
+                phase,
                 clients: Number.isFinite(clients) ? clients : 0,
                 maxClients: Number.isFinite(maxClients) ? maxClients : 0,
                 locked: Boolean(room?.locked),
               };
             })
             .filter((room) => room.roomId)
-            .filter((room) => {
-              if (!resolvedTrackId) {
-                return true;
+            .sort((a, b) => {
+              const aPreferred = preferredTrackId && a.trackId === preferredTrackId ? 1 : 0;
+              const bPreferred = preferredTrackId && b.trackId === preferredTrackId ? 1 : 0;
+              if (aPreferred !== bPreferred) {
+                return bPreferred - aPreferred;
               }
-              return !room.trackId || room.trackId === resolvedTrackId;
-            })
-            .sort((a, b) => b.clients - a.clients || a.roomId.localeCompare(b.roomId));
+              return b.clients - a.clients || a.roomId.localeCompare(b.roomId);
+            });
 
           return {
             ok: true,
@@ -318,6 +362,25 @@ export function createOnlineRoomClientApi({ state } = {}) {
 
       throw lastError || new Error("match_server_unreachable");
     } catch (error) {
+      const unsupported =
+        typeof error?.message === "string" && error.message.includes("room_listing_unsupported_by_client");
+      const roomsApiMissing =
+        typeof error?.message === "string" &&
+        (error.message.includes("room_listing_http_404") || error.message.includes("room_listing_http_405"));
+      if (unsupported) {
+        return {
+          ok: true,
+          rooms: [],
+          endpoint: null,
+        };
+      }
+      if (roomsApiMissing) {
+        return {
+          ok: true,
+          rooms: [],
+          endpoint: null,
+        };
+      }
       return {
         ok: false,
         error: error?.message || String(error),

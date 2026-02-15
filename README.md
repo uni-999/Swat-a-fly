@@ -314,4 +314,7 @@ npx serve . -l 5500
 - 2026-02: Online steering parity fix: в `match-server` для человека убрано сглаживание руля (`steer = turn` напрямую), а частота тика сервера повышена до `60 Hz` (`SERVER_TICK_RATE=60`) для более плавного online-управления, ближе к оффлайн-ощущению.
 - 2026-02: Online room picker fallback: если на домене загружен старый `index.html` без блока выбора комнаты, UI выбора комнаты теперь создаётся динамически в `src/game/uiFlow.js` на экране выбора трассы.
 - 2026-02: Web cache-control fix: в `infra/web/nginx.conf` для `index.html` и `*.js/*.mjs/*.css` включен `Cache-Control: no-store`, чтобы прод-домен не застревал на устаревшем фронтенде.
+- 2026-02: Online room-listing compatibility fix: добавлен endpoint `GET /rooms/race` в `match-server` (через `matchMaker.query`) и fallback-клиентская загрузка списка комнат по HTTP, если в `colyseus.js` нет `client.getAvailableRooms()`.
+- 2026-02: Online room-list UX fix: список комнат больше не скрывает комнаты «другой» трассы; текущая выбранная трасса только приоритизируется в сортировке.
+- 2026-02: Asset path robustness fix: пути к спрайтам/музыке/бэкдропам/тайлам переведены на абсолютные (`/assets/...`), чтобы рендер трассы и змей корректно работал на прод-доменах и при любых текущих URL.
 - 2026-02: Infra logging fix: в `infra/web/nginx.conf` добавлен `log_format docker_realip`, вывод access/error логов в stdout/stderr контейнера и извлечение реального IP из `X-Forwarded-For` (с `real_ip_recursive` и доверенными private-сетями), чтобы в `docker logs` видеть адреса клиентов.

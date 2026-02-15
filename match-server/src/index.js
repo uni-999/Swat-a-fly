@@ -4,7 +4,7 @@ import { promises as fs } from "node:fs";
 
 import cors from "cors";
 import express from "express";
-import { Server } from "@colyseus/core";
+import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 
 import { createNakamaClient } from "./nakamaClient.js";
@@ -45,6 +45,32 @@ app.get("/local-stats/race-duration", async (_req, res) => {
   } catch (error) {
     console.error("[match-server] read race duration stats failed:", error);
     res.status(500).json({ ok: false, error: "read_failed" });
+  }
+});
+
+app.get("/rooms/race", async (req, res) => {
+  try {
+    const trackIdFilter = typeof req.query?.trackId === "string" ? req.query.trackId.trim() : "";
+    const listed = await matchMaker.query({ name: "race" });
+    const rooms = (Array.isArray(listed) ? listed : [])
+      .map((room) => {
+        const metadata = room?.metadata && typeof room.metadata === "object" ? room.metadata : {};
+        return {
+          roomId: String(room?.roomId || ""),
+          trackId: typeof metadata.trackId === "string" ? metadata.trackId : null,
+          phase: typeof metadata.phase === "string" ? metadata.phase : "lobby",
+          clients: Number(room?.clients || 0),
+          maxClients: Number(room?.maxClients || 0),
+          locked: Boolean(room?.locked),
+        };
+      })
+      .filter((room) => room.roomId)
+      .filter((room) => !trackIdFilter || !room.trackId || room.trackId === trackIdFilter);
+
+    res.status(200).json({ ok: true, rooms });
+  } catch (error) {
+    console.error("[match-server] /rooms/race failed:", error);
+    res.status(500).json({ ok: false, error: "rooms_query_failed" });
   }
 });
 

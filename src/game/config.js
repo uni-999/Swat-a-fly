@@ -113,25 +113,25 @@ export const TITLE_REMOTE_STATS_PATH = "/local-stats/race-duration";
 export const TITLE_REMOTE_STATS_RETRY_MS = 20000;
 export const MENU_MUSIC = {
   key: "music_menu_theme",
-  path: "assets/sounds/music/menu_theme.wav",
+  path: "/assets/sounds/music/menu_theme.wav",
   volume: 0.3,
 };
 export const TRACK_MUSIC = {
-  canyon_loop: { key: "music_track_formula1", path: "assets/sounds/Formula1.mp3", volume: 0.34 },
-  switchback_run: { key: "music_track_nightn_city", path: "assets/sounds/Nightn_city.mp3", volume: 0.34 },
-  twin_fang: { key: "music_track_start_ud", path: "assets/sounds/Start_UD.mp3", volume: 0.34 },
-  dune_orbit: { key: "music_track_dune_orbit", path: "assets/sounds/music/dune_orbit.wav", volume: 0.34 },
-  neon_delta: { key: "music_track_neon_delta", path: "assets/sounds/music/neon_delta.wav", volume: 0.34 },
-  volcano_spiral: { key: "music_track_volcano_spiral", path: "assets/sounds/music/volcano_spiral.wav", volume: 0.34 },
-  glacier_chicane: { key: "music_track_glacier_chicane", path: "assets/sounds/music/glacier_chicane.wav", volume: 0.34 },
+  canyon_loop: { key: "music_track_formula1", path: "/assets/sounds/Formula1.mp3", volume: 0.34 },
+  switchback_run: { key: "music_track_nightn_city", path: "/assets/sounds/Nightn_city.mp3", volume: 0.34 },
+  twin_fang: { key: "music_track_start_ud", path: "/assets/sounds/Start_UD.mp3", volume: 0.34 },
+  dune_orbit: { key: "music_track_dune_orbit", path: "/assets/sounds/music/dune_orbit.wav", volume: 0.34 },
+  neon_delta: { key: "music_track_neon_delta", path: "/assets/sounds/music/neon_delta.wav", volume: 0.34 },
+  volcano_spiral: { key: "music_track_volcano_spiral", path: "/assets/sounds/music/volcano_spiral.wav", volume: 0.34 },
+  glacier_chicane: { key: "music_track_glacier_chicane", path: "/assets/sounds/music/glacier_chicane.wav", volume: 0.34 },
 };
 export const TRACK_BACKDROP_IMAGES = {
-  canyon_loop: { key: "track_backdrop_formula1", path: "assets/sprites/track/Formula1.png" },
-  switchback_run: { key: "track_backdrop_nightn_city", path: "assets/sprites/track/Nightn_city.png" },
-  twin_fang: { key: "track_backdrop_start_ud", path: "assets/sprites/track/Start_UD.png" },
+  canyon_loop: { key: "track_backdrop_formula1", path: "/assets/sprites/track/Formula1.png" },
+  switchback_run: { key: "track_backdrop_nightn_city", path: "/assets/sprites/track/Nightn_city.png" },
+  twin_fang: { key: "track_backdrop_start_ud", path: "/assets/sprites/track/Start_UD.png" },
 };
 export const TRACK_SURFACE_TILES = {
-  grass: { key: "track_tile_grass", path: "assets/sprites/track/grass_tile.svg" },
-  dirt: { key: "track_tile_dirt", path: "assets/sprites/track/dirt_tile.svg" },
-  asphalt: { key: "track_tile_asphalt", path: "assets/sprites/track/asphalt_tile.svg" },
+  grass: { key: "track_tile_grass", path: "/assets/sprites/track/grass_tile.svg" },
+  dirt: { key: "track_tile_dirt", path: "/assets/sprites/track/dirt_tile.svg" },
+  asphalt: { key: "track_tile_asphalt", path: "/assets/sprites/track/asphalt_tile.svg" },
 };
