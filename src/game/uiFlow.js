@@ -78,11 +78,148 @@ export function createUiFlowApi({
     ui.playerNameInput.addEventListener("blur", () => applyPlayerNameFromInput());
   }
 
+  function normalizeOnlineRoomId(rawRoomId) {
+    return String(rawRoomId ?? "")
+      .trim()
+      .slice(0, ONLINE_ROOM_ID_MAX_LENGTH);
+  }
+
+  function syncOnlineRoomPickerVisibility() {
+    if (!ui.onlineRoomPicker) {
+      return;
+    }
+    ui.onlineRoomPicker.hidden = !(state.playMode === "online" && state.currentScreen === "track");
+  }
+
+  function getResolvedOnlineRoomId() {
+    const manualRoomId = normalizeOnlineRoomId(ui.onlineRoomIdInput?.value || "");
+    const selectedRoomId = normalizeOnlineRoomId(ui.onlineRoomSelect?.value || "");
+    const stateRoomId = normalizeOnlineRoomId(state.onlineRoomId);
+    return manualRoomId || selectedRoomId || stateRoomId || "";
+  }
+
+  function renderOnlineRoomOptions() {
+    if (!ui.onlineRoomSelect) {
+      return;
+    }
+
+    const manualRoomId = normalizeOnlineRoomId(ui.onlineRoomIdInput?.value || "");
+    const selectedBefore = normalizeOnlineRoomId(ui.onlineRoomSelect.value || state.onlineRoomId);
+    const rooms = Array.isArray(state.onlineRoomOptions) ? state.onlineRoomOptions : [];
+    ui.onlineRoomSelect.innerHTML = "";
+
+    const autoOption = document.createElement("option");
+    autoOption.value = "";
+    autoOption.textContent = "Авто: подключиться или создать";
+    ui.onlineRoomSelect.appendChild(autoOption);
+
+    for (const room of rooms) {
+      if (!room?.roomId) {
+        continue;
+      }
+      const option = document.createElement("option");
+      option.value = room.roomId;
+      const occupancy =
+        Number.isFinite(room.clients) && Number.isFinite(room.maxClients) && room.maxClients > 0
+          ? `${room.clients}/${room.maxClients}`
+          : "-/-";
+      const phaseLabel = room.phase || "lobby";
+      option.textContent = `${room.roomId} (${occupancy}, ${phaseLabel})`;
+      ui.onlineRoomSelect.appendChild(option);
+    }
+
+    let selectedNow = "";
+    ui.onlineRoomSelect.value = "";
+    if (selectedBefore) {
+      const hasSelected = rooms.some((room) => room.roomId === selectedBefore);
+      if (hasSelected) {
+        ui.onlineRoomSelect.value = selectedBefore;
+        selectedNow = selectedBefore;
+      }
+    }
+    if (!manualRoomId) {
+      state.onlineRoomId = selectedNow;
+    }
+  }
+
+  async function refreshOnlineRooms({ silent = false } = {}) {
+    if (state.playMode !== "online") {
+      return;
+    }
+    const trackId = state.selectedTrackId || TRACK_DEFS[0]?.id || null;
+    if (!trackId || typeof listOnlineRooms !== "function") {
+      return;
+    }
+
+    if (ui.onlineRoomRefresh) {
+      ui.onlineRoomRefresh.disabled = true;
+    }
+    const result = await listOnlineRooms({ trackId });
+    if (ui.onlineRoomRefresh) {
+      ui.onlineRoomRefresh.disabled = false;
+    }
+
+    if (!result?.ok) {
+      state.onlineRoomOptions = [];
+      state.onlineRoomOptionsTrackId = trackId;
+      renderOnlineRoomOptions();
+      if (!silent) {
+        showToast(`Не удалось получить список комнат: ${result?.error || "unknown_error"}`);
+      }
+      return;
+    }
+
+    state.onlineRoomOptions = Array.isArray(result.rooms) ? result.rooms : [];
+    state.onlineRoomOptionsTrackId = trackId;
+    renderOnlineRoomOptions();
+    if (!silent) {
+      showToast(`Комнат найдено: ${state.onlineRoomOptions.length}`);
+    }
+  }
+
+  function initOnlineRoomUi() {
+    renderOnlineRoomOptions();
+    syncOnlineRoomPickerVisibility();
+
+    if (ui.onlineRoomSelect) {
+      ui.onlineRoomSelect.addEventListener("change", () => {
+        const selected = normalizeOnlineRoomId(ui.onlineRoomSelect.value);
+        state.onlineRoomId = selected;
+        if (selected && ui.onlineRoomIdInput) {
+          ui.onlineRoomIdInput.value = "";
+        }
+      });
+    }
+
+    if (ui.onlineRoomIdInput) {
+      ui.onlineRoomIdInput.addEventListener("input", () => {
+        const normalized = normalizeOnlineRoomId(ui.onlineRoomIdInput.value);
+        if (ui.onlineRoomIdInput.value !== normalized) {
+          ui.onlineRoomIdInput.value = normalized;
+        }
+        state.onlineRoomId = normalized;
+      });
+      ui.onlineRoomIdInput.addEventListener("blur", () => {
+        const normalized = normalizeOnlineRoomId(ui.onlineRoomIdInput.value);
+        ui.onlineRoomIdInput.value = normalized;
+        state.onlineRoomId = normalized;
+      });
+    }
+
+    if (ui.onlineRoomRefresh) {
+      ui.onlineRoomRefresh.addEventListener("click", () => {
+        void refreshOnlineRooms();
+      });
+    }
+  }
+
   function wireUi() {
     initPlayerNameUi();
+    initOnlineRoomUi();
 
     document.getElementById("btn-offline").addEventListener("click", () => {
       state.playMode = "offline";
+      state.onlineRoomId = "";
       void disconnectOnlineRace?.();
       showScreen("snake");
       showToast("Офлайн-режим активирован.");
@@ -92,6 +229,9 @@ export function createUiFlowApi({
       state.playMode = "online";
       showScreen("snake");
       showToast("Онлайн MVP: выбери змею и трассу, затем нажми Старт для подключения к комнате.");
+      if (state.onlineRoomOptionsTrackId !== state.selectedTrackId) {
+        void refreshOnlineRooms({ silent: true });
+      }
     });
 
     document.getElementById("btn-leaderboards").addEventListener("click", () =>
@@ -191,6 +331,15 @@ export function createUiFlowApi({
       }, 0);
     }
 
+    syncOnlineRoomPickerVisibility();
+    if (name === "track" && state.playMode === "online") {
+      if (state.onlineRoomOptionsTrackId !== state.selectedTrackId) {
+        void refreshOnlineRooms({ silent: true });
+      } else {
+        renderOnlineRoomOptions();
+      }
+    }
+
     syncRaceMusic();
   }
 
@@ -243,12 +392,20 @@ export function createUiFlowApi({
         <li>Best local: ${Number.isFinite(best) ? formatMs(best) : "-"}</li>
         <li>Road width: ${track.roadWidth}</li>
       </ul>
-    `;
+      `;
       card.addEventListener("click", () => {
+        const previousTrackId = state.selectedTrackId;
         state.selectedTrackId = track.id;
         ui.trackStart.disabled = false;
         [...ui.trackCards.children].forEach((node) => node.classList.remove("selected"));
         card.classList.add("selected");
+        if (state.playMode === "online") {
+          if (state.onlineRoomOptionsTrackId !== track.id || previousTrackId !== track.id) {
+            void refreshOnlineRooms({ silent: true });
+          } else {
+            renderOnlineRoomOptions();
+          }
+        }
       });
 
       if (!state.selectedTrackId && track.id === "canyon_loop") {
@@ -314,15 +471,41 @@ export function createUiFlowApi({
       syncRaceMusic();
 
       const selectedSnake = SNAKES.find((item) => item.id === state.selectedSnakeId) || SNAKES[0];
+      const selectedRoomId = getResolvedOnlineRoomId();
+      state.onlineRoomId = selectedRoomId;
       const connectResult = await startOnlineRace?.({
         trackId: trackDef.id,
         playerName: getResolvedPlayerName() || `Player (${selectedSnake.name})`,
+        roomId: selectedRoomId,
       });
 
       if (!connectResult?.ok) {
         showScreen("track");
         showToast(`Не удалось подключиться к онлайн-комнате: ${connectResult?.error || "unknown_error"}`);
         return false;
+      }
+
+      const connectedRoomId = normalizeOnlineRoomId(connectResult.roomId || selectedRoomId);
+      state.onlineRoomId = connectedRoomId;
+      if (connectedRoomId && !state.onlineRoomOptions.some((room) => room.roomId === connectedRoomId)) {
+        state.onlineRoomOptions = [
+          {
+            roomId: connectedRoomId,
+            trackId: trackDef.id,
+            phase: "lobby",
+            clients: 1,
+            maxClients: 4,
+            locked: false,
+          },
+          ...state.onlineRoomOptions,
+        ];
+      }
+      if (ui.onlineRoomIdInput && ui.onlineRoomIdInput.value.trim()) {
+        ui.onlineRoomIdInput.value = connectedRoomId;
+      }
+      renderOnlineRoomOptions();
+      if (ui.onlineRoomSelect && connectedRoomId) {
+        ui.onlineRoomSelect.value = connectedRoomId;
       }
 
       syncRaceMusic();
