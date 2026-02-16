@@ -19,6 +19,8 @@ const snakeNameById = new Map(
     .filter((snake) => snake?.id && snake?.name)
     .map((snake) => [String(snake.id).toLowerCase(), String(snake.name)])
 );
+const TOUCH_AIM_TURN_GAIN = 1.35;
+const TOUCH_AIM_DEADZONE = 0.08;
 
 function resolveSnakeName(rawSnakeId) {
   const normalized = String(rawSnakeId ?? "")
@@ -28,6 +30,17 @@ function resolveSnakeName(rawSnakeId) {
     return "Змея";
   }
   return snakeNameById.get(normalized) || String(rawSnakeId);
+}
+
+function shortestAngleDelta(current, target) {
+  let diff = (Number(target) || 0) - (Number(current) || 0);
+  while (diff > Math.PI) {
+    diff -= Math.PI * 2;
+  }
+  while (diff < -Math.PI) {
+    diff += Math.PI * 2;
+  }
+  return diff;
 }
 
 export function createRaceFlowApi({
@@ -140,7 +153,7 @@ export function createRaceFlowApi({
       if (racer.finished) {
         continue;
       }
-      const control = racer.isPlayer ? readPlayerControl() : buildNpcControl(race, racer, nowMs);
+      const control = racer.isPlayer ? readPlayerControl(racer) : buildNpcControl(race, racer, nowMs);
       stepRacer(race, racer, control, nowMs, dt);
       applyBodyCrossingRules(race, racer, nowMs);
       preventRacerStall(race, racer, nowMs, dt);
@@ -229,14 +242,25 @@ export function createRaceFlowApi({
     }
   }
 
-  function readPlayerControl() {
+  function readPlayerControl(racer = null) {
     const left = state.keyMap.has("ArrowLeft") || state.keyMap.has("KeyA");
     const right = state.keyMap.has("ArrowRight") || state.keyMap.has("KeyD");
     const up = state.keyMap.has("ArrowUp") || state.keyMap.has("KeyW");
     const down = state.keyMap.has("ArrowDown") || state.keyMap.has("KeyS");
-    const virtualTurn = clamp(Number(state.virtualInput?.turn) || 0, -1, 1);
+    const virtualTurnBase = clamp(Number(state.virtualInput?.turn) || 0, -1, 1);
     const virtualThrottle = clamp(Number(state.virtualInput?.throttle) || 0, 0, 1);
     const virtualBrake = clamp(Number(state.virtualInput?.brake) || 0, 0, 1);
+    const aimAngle = Number(state.virtualInput?.aimAngle);
+    const aimMagnitude = clamp(Number(state.virtualInput?.magnitude) || 0, 0, 1);
+    let virtualTurn = virtualTurnBase;
+    if (
+      racer &&
+      Number.isFinite(Number(racer.heading)) &&
+      Number.isFinite(aimAngle) &&
+      aimMagnitude >= TOUCH_AIM_DEADZONE
+    ) {
+      virtualTurn = clamp(shortestAngleDelta(Number(racer.heading), aimAngle) * TOUCH_AIM_TURN_GAIN, -1, 1);
+    }
     return {
       turn: clamp((left ? -1 : 0) + (right ? 1 : 0) + virtualTurn, -1, 1),
       throttle: Math.max(up ? 1 : 0, virtualThrottle),

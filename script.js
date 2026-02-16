@@ -1,4 +1,4 @@
-import { bootstrapApp } from "./src/game/app.js?v=20260216_mobile_joy_6";
+import { bootstrapApp } from "./src/game/app.js?v=20260216_mobile_joy_7";
 
 const PHASER_CANDIDATE_URLS = [
   "/assets/vendor/phaser.min.js",

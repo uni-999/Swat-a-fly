@@ -10,11 +10,11 @@ import { ui, state, isDebugMode, setOfflineMode, updateOfflineModeUi } from "./s
 import { createRaceDurationStatsApi } from "./raceDurationStats.js";
 import { initSnakeTitleWave } from "./titleWave.js";
 import { createAiApi } from "./ai.js";
-import { createRaceFlowApi } from "./raceFlow.js";
+import { createRaceFlowApi } from "./raceFlow.js?v=20260216_touch_drive_1";
 import { createRaceState, randomizePickupPosition, randomizeBodyItemPosition } from "./raceSetup.js";
 import { createHudApi } from "./hud.js";
 import { createSceneApi } from "./scene.js?v=20260216_leaderboard_2";
-import { createUiFlowApi } from "./uiFlow.js?v=20260216_cards_1";
+import { createUiFlowApi } from "./uiFlow.js?v=20260216_touch_drive_1";
 import { createCoreUiApi } from "./coreUi.js";
 import { createOnlineRoomClientApi } from "./onlineRoomClient.js";
 import {

@@ -83,6 +83,8 @@ export const state = {
     throttle: 0,
     brake: 0,
     active: false,
+    aimAngle: null,
+    magnitude: 0,
   },
   toastTimeout: null,
   lastRestartAtMs: 0,

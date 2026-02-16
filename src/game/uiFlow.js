@@ -31,6 +31,7 @@ export function createUiFlowApi({
   const TOUCH_JOYSTICK_RADIUS_PX = 46;
   const TOUCH_TURN_DEADZONE = 0.12;
   const TOUCH_THROTTLE_DEADZONE = 0.08;
+  const TOUCH_AIM_TURN_GAIN = 1.35;
   const PRESS_DEBOUNCE_MS = 140;
   let onlineInputPumpId = null;
   let lastOnlineInputSignature = "";
@@ -253,13 +254,15 @@ export function createUiFlowApi({
 
   function resetVirtualInputState() {
     if (!state.virtualInput) {
-      state.virtualInput = { turn: 0, throttle: 0, brake: 0, active: false };
+      state.virtualInput = { turn: 0, throttle: 0, brake: 0, active: false, aimAngle: null, magnitude: 0 };
       return;
     }
     state.virtualInput.turn = 0;
     state.virtualInput.throttle = 0;
     state.virtualInput.brake = 0;
     state.virtualInput.active = false;
+    state.virtualInput.aimAngle = null;
+    state.virtualInput.magnitude = 0;
   }
 
   function setTouchJoystickVisual(dx, dy) {
@@ -320,17 +323,21 @@ export function createUiFlowApi({
 
     setTouchJoystickVisual(dx, dy);
 
-    const turnRaw = clampUnit(dx / TOUCH_JOYSTICK_RADIUS_PX);
-    const upRaw = clamp01((-dy) / TOUCH_JOYSTICK_RADIUS_PX);
-    const downRaw = clamp01(dy / TOUCH_JOYSTICK_RADIUS_PX);
-    const turn = Math.abs(turnRaw) >= TOUCH_TURN_DEADZONE ? turnRaw : 0;
-    const throttle = upRaw >= TOUCH_THROTTLE_DEADZONE ? upRaw : 0;
-    const brake = downRaw >= TOUCH_THROTTLE_DEADZONE ? downRaw : 0;
+    const nx = clampUnit(dx / TOUCH_JOYSTICK_RADIUS_PX);
+    const ny = clampUnit(dy / TOUCH_JOYSTICK_RADIUS_PX);
+    const magnitude = clamp01(Math.hypot(dx, dy) / TOUCH_JOYSTICK_RADIUS_PX);
+    const active = magnitude >= TOUCH_THROTTLE_DEADZONE;
+    const turn = active && Math.abs(nx) >= TOUCH_TURN_DEADZONE ? nx : 0;
+    const throttle = active ? magnitude : 0;
+    const brake = 0;
+    const aimAngle = active ? Math.atan2(ny, nx) : null;
 
     state.virtualInput.turn = turn;
     state.virtualInput.throttle = throttle;
     state.virtualInput.brake = brake;
-    state.virtualInput.active = Math.abs(turn) > 0 || throttle > 0 || brake > 0;
+    state.virtualInput.active = active;
+    state.virtualInput.aimAngle = aimAngle;
+    state.virtualInput.magnitude = active ? magnitude : 0;
     pushOnlineInput(true);
   }
 
@@ -1245,12 +1252,67 @@ export function createUiFlowApi({
     return idx >= 0 ? idx : 0;
   }
 
+  function shortestAngleDelta(current, target) {
+    let diff = (Number(target) || 0) - (Number(current) || 0);
+    while (diff > Math.PI) {
+      diff -= Math.PI * 2;
+    }
+    while (diff < -Math.PI) {
+      diff += Math.PI * 2;
+    }
+    return diff;
+  }
+
+  function resolveOnlineControlledHeading() {
+    const snapshotPlayers = Array.isArray(state.online?.snapshot?.players) ? state.online.snapshot.players : [];
+    if (!snapshotPlayers.length) {
+      return NaN;
+    }
+
+    const sessionId = String(state.online?.sessionId || "");
+    const bySession = sessionId
+      ? snapshotPlayers.find((player) => String(player?.sessionId || "") === sessionId)
+      : null;
+
+    if (bySession && Number.isFinite(Number(bySession.heading))) {
+      return Number(bySession.heading);
+    }
+
+    const localName = String(state.playerName || "")
+      .trim()
+      .toLowerCase();
+    const byName = localName
+      ? snapshotPlayers.find(
+          (player) =>
+            !player?.isBot && String(player?.displayName || "").trim().toLowerCase() === localName,
+        )
+      : null;
+    return Number.isFinite(Number(byName?.heading)) ? Number(byName.heading) : NaN;
+  }
+
+  function deriveVirtualTurnFromAim(baseVirtualTurn = 0) {
+    const aimAngle = Number(state.virtualInput?.aimAngle);
+    const magnitude = clamp01(state.virtualInput?.magnitude || 0);
+    if (!Number.isFinite(aimAngle) || magnitude < TOUCH_THROTTLE_DEADZONE) {
+      return clampUnit(baseVirtualTurn);
+    }
+
+    const heading = resolveOnlineControlledHeading();
+    if (!Number.isFinite(heading)) {
+      return clampUnit(baseVirtualTurn);
+    }
+
+    const delta = shortestAngleDelta(heading, aimAngle);
+    return clampUnit(delta * TOUCH_AIM_TURN_GAIN);
+  }
+
   function buildOnlineInputFromKeys() {
     const left = state.keyMap.has("ArrowLeft") || state.keyMap.has("KeyA");
     const right = state.keyMap.has("ArrowRight") || state.keyMap.has("KeyD");
     const up = state.keyMap.has("ArrowUp") || state.keyMap.has("KeyW");
     const down = state.keyMap.has("ArrowDown") || state.keyMap.has("KeyS");
-    const virtualTurn = clampUnit(state.virtualInput?.turn || 0);
+    const virtualTurnBase = clampUnit(state.virtualInput?.turn || 0);
+    const virtualTurn = deriveVirtualTurnFromAim(virtualTurnBase);
     const virtualThrottle = clamp01(state.virtualInput?.throttle || 0);
     const virtualBrake = clamp01(state.virtualInput?.brake || 0);
     return {
