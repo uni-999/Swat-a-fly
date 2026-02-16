@@ -488,14 +488,59 @@ export function createUiFlowApi({
   }
 
   function maybeHandleOnlineFinishedSnapshot() {
-    if (state.playMode !== "online" || state.currentScreen !== "race") {
-      return;
-    }
     const snapshot = state.online?.snapshot;
-    if (!snapshot || snapshot.phase !== "finished") {
+    if (!snapshot) {
+      onlineNoProgressSinceMs = 0;
+      onlineLastMaxProgress = 0;
+      onlineProgressWatchKey = "";
       return;
     }
-    const finishKey = getOnlineFinishKey(snapshot);
+    const players = Array.isArray(snapshot.players) ? snapshot.players : [];
+    if (!players.length) {
+      return;
+    }
+
+    const roomId = String(snapshot?.roomId || state.online?.roomId || "-");
+    const trackId = normalizeTrackId(snapshot?.trackId || state.online?.trackId || state.selectedTrackId || "");
+    const watchKey = `${roomId}|${trackId}`;
+    if (watchKey !== onlineProgressWatchKey) {
+      onlineProgressWatchKey = watchKey;
+      onlineNoProgressSinceMs = 0;
+      onlineLastMaxProgress = 0;
+    }
+
+    const maxProgress = players.reduce((acc, player) => Math.max(acc, Number(player?.progress) || 0), 0);
+    const nowMs = Date.now();
+    if (maxProgress > onlineLastMaxProgress + 1.2) {
+      onlineLastMaxProgress = maxProgress;
+      onlineNoProgressSinceMs = 0;
+    } else if ((snapshot.phase || "") === "running") {
+      const allSlow = players.every((player) => (Number(player?.speed) || 0) < 1.2);
+      if (allSlow) {
+        if (!onlineNoProgressSinceMs) {
+          onlineNoProgressSinceMs = nowMs;
+        }
+      } else {
+        onlineNoProgressSinceMs = 0;
+      }
+    }
+
+    const explicitFinished =
+      snapshot.phase === "finished" ||
+      (Number.isFinite(Number(snapshot?.raceEndedAtMs)) && Number(snapshot.raceEndedAtMs) > 0) ||
+      players.every((player) => player?.finished === true);
+    const stalledRunningFallback =
+      snapshot.phase === "running" &&
+      onlineNoProgressSinceMs > 0 &&
+      nowMs - onlineNoProgressSinceMs >= 9000;
+
+    if (!explicitFinished && !stalledRunningFallback) {
+      return;
+    }
+
+    const finishKey = explicitFinished
+      ? getOnlineFinishKey(snapshot)
+      : `${watchKey}|stalled:${Math.floor(onlineNoProgressSinceMs / 1000)}`;
     if (finishKey === lastHandledOnlineFinishKey) {
       return;
     }
@@ -510,7 +555,18 @@ export function createUiFlowApi({
     renderResultsRows(state.lastResults);
     showScreen("results");
     void disconnectOnlineRace?.();
-    showToast("Финиш онлайн-заезда: таблица результатов обновлена.");
+    if (stalledRunningFallback && !explicitFinished) {
+      showToast("Онлайн-заезд завершен по прогрессу: движения нет слишком долго.");
+    } else {
+      showToast("Финиш онлайн-заезда: таблица результатов обновлена.");
+    }
+  }
+
+  function resetOnlineFinishWatchers() {
+    lastHandledOnlineFinishKey = "";
+    onlineNoProgressSinceMs = 0;
+    onlineLastMaxProgress = 0;
+    onlineProgressWatchKey = "";
   }
 
   function wireUi() {
@@ -522,6 +578,7 @@ export function createUiFlowApi({
     document.getElementById("btn-offline").addEventListener("click", () => {
       state.playMode = "offline";
       state.onlineRoomId = "";
+      resetOnlineFinishWatchers();
       void disconnectOnlineRace?.();
       showScreen("snake");
       showToast("Офлайн-режим активирован.");
@@ -584,6 +641,7 @@ export function createUiFlowApi({
     });
 
     document.getElementById("results-back").addEventListener("click", () => {
+      resetOnlineFinishWatchers();
       void disconnectOnlineRace?.();
       state.race = null;
       renderTrackCards();
@@ -827,7 +885,7 @@ export function createUiFlowApi({
     state.selectedTrackId = trackDef.id;
     state.lastFinishedTrackId = null;
     state.keyMap.clear();
-    lastHandledOnlineFinishKey = "";
+    resetOnlineFinishWatchers();
 
     if (state.playMode === "online") {
       state.race = null;
