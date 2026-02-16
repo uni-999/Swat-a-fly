@@ -367,8 +367,8 @@ function resolveOnlineTrack(trackId) {
   }
 
   const runtime = buildTrackRuntime(trackDef);
-  const pickups = createOnlinePickups(runtime, normalizedTrackId);
-  const bodyItems = createOnlineBodyItems(runtime, trackId, pickups);
+  const pickups = createOnlinePickups(runtime);
+  const bodyItems = createOnlineBodyItems(runtime, pickups);
   const raceView = {
     trackDef,
     track: runtime,
@@ -416,13 +416,12 @@ function normalizeOnlineObjects(snapshotList, fallbackList) {
   }));
 }
 
-function createOnlinePickups(track, trackId = "") {
-  const rng = createSeededRng(hashString(`online_pickups_${trackId || "track"}`));
+function createOnlinePickups(track) {
   const fractions = Array.isArray(track?.pickupFractions) ? track.pickupFractions : [];
   return fractions.map((fraction, index) => {
     const sample = sampleTrack(track, fraction);
     const normal = { x: -sample.tangent.y, y: sample.tangent.x };
-    const laneRatio = randomLaneRatioFromRng(rng);
+    const laneRatio = randomLaneRatio();
     const lateral = track.roadWidth * laneRatio;
     return {
       id: `online_pickup_${index + 1}`,
@@ -435,19 +434,18 @@ function createOnlinePickups(track, trackId = "") {
   });
 }
 
-function createOnlineBodyItems(track, trackId, pickups = []) {
+function createOnlineBodyItems(track, pickups = []) {
   const items = [];
-  const rng = createSeededRng(hashString(`online_body_${trackId || "track"}`));
-  const baseOffset = rng();
-  const bodyItemTypes = buildBalancedBodyItemTypes(ONLINE_BODY_ITEM_COUNT, rng);
+  const baseOffset = Math.random();
+  const bodyItemTypes = buildBalancedBodyItemTypes(ONLINE_BODY_ITEM_COUNT);
 
   for (let i = 0; i < ONLINE_BODY_ITEM_COUNT; i += 1) {
     let chosen = null;
     for (let attempt = 0; attempt < 40; attempt += 1) {
-      const fraction = mod1(baseOffset + i / ONLINE_BODY_ITEM_COUNT + (rng() - 0.5) * 0.08);
+      const fraction = mod1(baseOffset + i / ONLINE_BODY_ITEM_COUNT + (Math.random() - 0.5) * 0.08);
       const sample = sampleTrack(track, fraction);
       const normal = { x: -sample.tangent.y, y: sample.tangent.x };
-      const laneRatio = randomLaneRatioFromRng(rng);
+      const laneRatio = randomLaneRatio();
       const lateral = track.roadWidth * laneRatio;
       const x = sample.x + normal.x * lateral;
       const y = sample.y + normal.y * lateral;
@@ -790,12 +788,12 @@ function getOnlineRacerMotionHeading(racer) {
   return racer?.heading || 0;
 }
 
-function randomLaneRatioFromRng(rng) {
-  const unit = clamp(Number(rng?.()) || 0, 0, 1);
+function randomLaneRatio(randomFn = Math.random) {
+  const unit = clamp(Number(randomFn?.()) || 0, 0, 1);
   return (unit * 2 - 1) * ONLINE_MAX_OBJECT_LANE_RATIO;
 }
 
-function buildBalancedBodyItemTypes(count, rng) {
+function buildBalancedBodyItemTypes(count, randomFn = Math.random) {
   const total = Math.max(0, Math.floor(Number(count) || 0));
   const appleCount = Math.ceil(total * 0.5);
   const cactusCount = Math.max(0, total - appleCount);
@@ -804,7 +802,7 @@ function buildBalancedBodyItemTypes(count, rng) {
     ...new Array(cactusCount).fill("CACTUS"),
   ];
   for (let i = types.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(clamp(Number(rng?.()) || 0, 0, 0.999999) * (i + 1));
+    const j = Math.floor(clamp(Number(randomFn?.()) || 0, 0, 0.999999) * (i + 1));
     const tmp = types[i];
     types[i] = types[j];
     types[j] = tmp;
@@ -834,14 +832,6 @@ function sqrDistance(ax, ay, bx, by) {
   const dx = ax - bx;
   const dy = ay - by;
   return dx * dx + dy * dy;
-}
-
-function createSeededRng(seed) {
-  let state = (seed >>> 0) || 1;
-  return () => {
-    state = (1664525 * state + 1013904223) >>> 0;
-    return state / 4294967296;
-  };
 }
 
 function shortestAngleDelta(next, prev) {

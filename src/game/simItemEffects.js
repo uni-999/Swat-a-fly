@@ -20,9 +20,12 @@ import {
   ensureAlwaysMoveSpeed,
 } from "./simBodyCore.js";
 
-function updatePickups(race, nowMs) {
+function updatePickups(race, nowMs, randomizePickupPositionFn) {
   for (const pickup of race.pickups) {
     if (!pickup.active && nowMs >= pickup.respawnAtMs) {
+      if (typeof randomizePickupPositionFn === "function") {
+        randomizePickupPositionFn(pickup, race.track, race.pickups);
+      }
       pickup.active = true;
     }
   }

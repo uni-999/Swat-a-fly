@@ -11,9 +11,9 @@ import { createRaceDurationStatsApi } from "./raceDurationStats.js";
 import { initSnakeTitleWave } from "./titleWave.js";
 import { createAiApi } from "./ai.js";
 import { createRaceFlowApi } from "./raceFlow.js";
-import { createRaceState, randomizeBodyItemPosition } from "./raceSetup.js";
+import { createRaceState, randomizePickupPosition, randomizeBodyItemPosition } from "./raceSetup.js";
 import { createHudApi } from "./hud.js";
-import { createSceneApi } from "./scene.js?v=20260216_leaderboard_1";
+import { createSceneApi } from "./scene.js?v=20260216_leaderboard_2";
 import { createUiFlowApi } from "./uiFlow.js";
 import { createCoreUiApi } from "./coreUi.js";
 import { createOnlineRoomClientApi } from "./onlineRoomClient.js";
@@ -121,6 +121,7 @@ export function bootstrapApp() {
     updateVenomShots,
     resolveRacerCollisions,
     computeStandings,
+    randomizePickupPosition,
     randomizeBodyItemPosition,
     showOverlayMessage,
     triggerCountdownBurst,

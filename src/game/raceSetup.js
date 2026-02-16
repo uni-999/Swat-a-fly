@@ -15,8 +15,14 @@ import { buildTrackRuntime, sampleTrack, projectOnTrack } from "./trackMath.js";
 
 const BODY_ITEM_FRACTION_JITTER = 0.06;
 const BODY_ITEM_ROUTE_ATTEMPTS = 48;
+const PICKUP_FRACTION_JITTER = 0.22;
+const PICKUP_ROUTE_ATTEMPTS = 56;
 const MAX_OBJECT_LANE_RATIO = 0.88;
 const BODY_ITEM_VALID_ROAD_RATIO = 0.92;
+const PICKUP_VALID_ROAD_RATIO = 0.92;
+const PICKUP_MIN_SEPARATION = 70;
+const PICKUP_TO_CHECKPOINT_MIN_DIST = 58;
+const PICKUP_TO_START_CHECKPOINT_MIN_DIST = 132;
 
 export function createRaceState(trackDef, selectedSnake, debugMode, startMs = performance.now()) {
   const track = buildTrackRuntime(trackDef);
@@ -157,21 +163,80 @@ function buildBalancedBodyItemTypes(count, randomFn = Math.random) {
 }
 
 export function createPickups(track) {
-  return track.pickupFractions.map((fraction, index) => {
-    const laneRatio = randomLaneRatio();
-    const placement = placeTrackObject(track, fraction, laneRatio);
-    return {
+  const pickupCount = Math.max(
+    1,
+    Array.isArray(track?.pickupFractions) && track.pickupFractions.length
+      ? track.pickupFractions.length
+      : PICKUP_ORDER.length,
+  );
+  const pickups = [];
+  for (let index = 0; index < pickupCount; index += 1) {
+    const pickup = {
       id: `pickup_${index + 1}`,
       type: PICKUP_ORDER[index % PICKUP_ORDER.length],
-      x: placement.x,
-      y: placement.y,
+      x: 0,
+      y: 0,
       active: true,
       respawnAtMs: 0,
       radius: 12,
-      routeFraction: placement.fraction,
-      laneRatio: placement.laneRatio,
+      routeFraction: Math.random(),
+      laneRatio: randomLaneRatio(),
     };
-  });
+    randomizePickupPosition(pickup, track, pickups);
+    pickups.push(pickup);
+  }
+  return pickups;
+}
+
+export function randomizePickupPosition(item, track, occupiedPickups = []) {
+  const baseFraction = Number.isFinite(item.routeFraction) ? item.routeFraction : Math.random();
+  const baseLaneRatio = Number.isFinite(item.laneRatio) ? item.laneRatio : randomLaneRatio();
+  let chosen = null;
+
+  for (let attempt = 0; attempt < PICKUP_ROUTE_ATTEMPTS; attempt += 1) {
+    const attemptFraction = mod1(baseFraction + (Math.random() - 0.5) * PICKUP_FRACTION_JITTER);
+    const attemptLaneRatio = randomLaneRatio();
+    const placement = placeTrackObject(track, attemptFraction, attemptLaneRatio);
+    if (isPickupPositionValid(item, placement.x, placement.y, track, occupiedPickups)) {
+      chosen = placement;
+      break;
+    }
+  }
+
+  if (!chosen) {
+    chosen = placeTrackObject(track, baseFraction, baseLaneRatio);
+  }
+
+  item.x = chosen.x;
+  item.y = chosen.y;
+  item.routeFraction = chosen.fraction;
+  item.laneRatio = chosen.laneRatio;
+}
+
+export function isPickupPositionValid(item, x, y, track, occupiedPickups = []) {
+  const projection = projectOnTrack(track, x, y);
+  if (!projection || projection.distance > track.roadWidth * PICKUP_VALID_ROAD_RATIO) {
+    return false;
+  }
+
+  for (let i = 0; i < track.checkpoints.length; i += 1) {
+    const cp = track.checkpoints[i];
+    const minDist = i === 0 ? PICKUP_TO_START_CHECKPOINT_MIN_DIST : PICKUP_TO_CHECKPOINT_MIN_DIST;
+    if (sqrDistance(x, y, cp.x, cp.y) < minDist ** 2) {
+      return false;
+    }
+  }
+
+  for (const other of occupiedPickups) {
+    if (!other || other.id === item.id) {
+      continue;
+    }
+    if (sqrDistance(x, y, other.x, other.y) < PICKUP_MIN_SEPARATION ** 2) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export function createBodyItems(track, pickups) {

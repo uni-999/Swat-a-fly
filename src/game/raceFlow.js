@@ -50,6 +50,7 @@ export function createRaceFlowApi({
   updateVenomShots,
   resolveRacerCollisions,
   computeStandings,
+  randomizePickupPosition,
   randomizeBodyItemPosition,
   showOverlayMessage,
   triggerCountdownBurst,
@@ -127,7 +128,7 @@ export function createRaceFlowApi({
       ui.overlay.style.removeProperty("--overlay-color");
     }
 
-    updatePickups(race, nowMs);
+    updatePickups(race, nowMs, randomizePickupPosition);
     updateBodyItems(race, nowMs, randomizeBodyItemPosition);
 
     for (const racer of race.racers) {

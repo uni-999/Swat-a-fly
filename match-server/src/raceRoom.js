@@ -44,6 +44,15 @@ const APPLE_BOOST_INSTANT_SPEED_FACTOR = 0.44;
 
 const ONLINE_MAX_OBJECT_LANE_RATIO = 0.88;
 const ONLINE_BODY_ITEM_COUNT = 12;
+const ONLINE_PICKUP_FRACTION_JITTER = 0.22;
+const ONLINE_PICKUP_ROUTE_ATTEMPTS = 56;
+const ONLINE_PICKUP_MIN_SEPARATION = 70;
+const ONLINE_PICKUP_TO_CHECKPOINT_MIN_DIST = 58;
+const ONLINE_PICKUP_TO_START_CHECKPOINT_MIN_DIST = 132;
+const ONLINE_PICKUP_VALID_ROAD_RATIO = 0.92;
+const ONLINE_BODY_ITEM_FRACTION_JITTER = 0.14;
+const ONLINE_BODY_ITEM_ROUTE_ATTEMPTS = 48;
+const ONLINE_BODY_ITEM_VALID_ROAD_RATIO = 0.92;
 const ONLINE_BODY_ITEM_MIN_SEPARATION = 64;
 const ONLINE_BODY_ITEM_TO_CHECKPOINT_MIN_DIST = 62;
 const ONLINE_BODY_ITEM_TO_PICKUP_MIN_DIST = 40;
@@ -99,30 +108,12 @@ function shortestAngleDelta(next, prev) {
   return diff;
 }
 
-function hashString(value) {
-  const text = String(value || "");
-  let hash = 0;
-  for (let i = 0; i < text.length; i += 1) {
-    hash = (hash << 5) - hash + text.charCodeAt(i);
-    hash |= 0;
-  }
-  return hash;
-}
-
-function createSeededRng(seed) {
-  let state = (seed >>> 0) || 1;
-  return () => {
-    state = (1664525 * state + 1013904223) >>> 0;
-    return state / 4294967296;
-  };
-}
-
-function randomLaneRatioFromRng(rng) {
-  const unit = clamp(safeNumber(rng?.(), 0), 0, 1);
+function randomLaneRatio(randomFn = Math.random) {
+  const unit = clamp(safeNumber(randomFn?.(), 0), 0, 1);
   return (unit * 2 - 1) * ONLINE_MAX_OBJECT_LANE_RATIO;
 }
 
-function buildBalancedBodyItemTypes(count, rng) {
+function buildBalancedBodyItemTypes(count, randomFn = Math.random) {
   const total = Math.max(0, Math.floor(safeNumber(count, 0)));
   const appleCount = Math.ceil(total * 0.5);
   const cactusCount = Math.max(0, total - appleCount);
@@ -131,7 +122,7 @@ function buildBalancedBodyItemTypes(count, rng) {
     ...new Array(cactusCount).fill("CACTUS"),
   ];
   for (let i = types.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(clamp(safeNumber(rng?.(), 0), 0, 0.999999) * (i + 1));
+    const j = Math.floor(clamp(safeNumber(randomFn?.(), 0), 0, 0.999999) * (i + 1));
     const tmp = types[i];
     types[i] = types[j];
     types[j] = tmp;
@@ -156,27 +147,97 @@ function getSpawnPose(trackId, slotIndex = 0) {
   };
 }
 
-function createTrackPickups(track, trackId = "") {
-  const rng = createSeededRng(hashString(`online_pickups_${trackId || "track"}`));
-  const fractions = Array.isArray(track?.pickupFractions) ? track.pickupFractions : [];
-  return fractions.map((fraction, index) => {
-    const sample = sampleTrack(track, fraction);
-    const normal = { x: -sample.tangent.y, y: sample.tangent.x };
-    const laneRatio = randomLaneRatioFromRng(rng);
-    const lateral = track.roadWidth * laneRatio;
-    return {
+function placeTrackObject(track, fraction, laneRatio = 0) {
+  const sample = sampleTrack(track, fraction);
+  const normal = { x: -sample.tangent.y, y: sample.tangent.x };
+  const cleanLaneRatio = clamp(laneRatio, -ONLINE_MAX_OBJECT_LANE_RATIO, ONLINE_MAX_OBJECT_LANE_RATIO);
+  const lateral = track.roadWidth * cleanLaneRatio;
+  return {
+    x: sample.x + normal.x * lateral,
+    y: sample.y + normal.y * lateral,
+    fraction: sample.fraction,
+    laneRatio: cleanLaneRatio,
+  };
+}
+
+function isPickupPositionValid(item, x, y, track, pickups = []) {
+  const projection = projectOnTrack(track, x, y);
+  if (!projection || projection.distance > track.roadWidth * ONLINE_PICKUP_VALID_ROAD_RATIO) {
+    return false;
+  }
+  for (let i = 0; i < track.checkpoints.length; i += 1) {
+    const cp = track.checkpoints[i];
+    const minDist = i === 0 ? ONLINE_PICKUP_TO_START_CHECKPOINT_MIN_DIST : ONLINE_PICKUP_TO_CHECKPOINT_MIN_DIST;
+    if (sqrDistance(x, y, cp.x, cp.y) < minDist ** 2) {
+      return false;
+    }
+  }
+  for (const pickup of pickups) {
+    if (!pickup || pickup.id === item.id) {
+      continue;
+    }
+    if (sqrDistance(x, y, pickup.x, pickup.y) < ONLINE_PICKUP_MIN_SEPARATION ** 2) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function randomizeTrackPickupPosition(item, track, pickups = []) {
+  const baseFraction = Number.isFinite(item.routeFraction) ? item.routeFraction : Math.random();
+  const baseLaneRatio = Number.isFinite(item.laneRatio) ? item.laneRatio : randomLaneRatio();
+  let chosen = null;
+
+  for (let attempt = 0; attempt < ONLINE_PICKUP_ROUTE_ATTEMPTS; attempt += 1) {
+    const attemptFraction = mod1(baseFraction + (Math.random() - 0.5) * ONLINE_PICKUP_FRACTION_JITTER);
+    const placement = placeTrackObject(track, attemptFraction, randomLaneRatio());
+    if (isPickupPositionValid(item, placement.x, placement.y, track, pickups)) {
+      chosen = placement;
+      break;
+    }
+  }
+
+  if (!chosen) {
+    chosen = placeTrackObject(track, baseFraction, baseLaneRatio);
+  }
+
+  item.x = chosen.x;
+  item.y = chosen.y;
+  item.routeFraction = chosen.fraction;
+  item.laneRatio = chosen.laneRatio;
+}
+
+function createTrackPickups(track) {
+  const pickupCount = Math.max(
+    1,
+    Array.isArray(track?.pickupFractions) && track.pickupFractions.length
+      ? track.pickupFractions.length
+      : PICKUP_ORDER.length,
+  );
+  const pickups = [];
+  for (let index = 0; index < pickupCount; index += 1) {
+    const pickup = {
       id: `pickup_${index + 1}`,
       type: PICKUP_ORDER[index % PICKUP_ORDER.length],
-      x: sample.x + normal.x * lateral,
-      y: sample.y + normal.y * lateral,
+      x: 0,
+      y: 0,
       active: true,
       radius: 12,
       respawnAtMs: 0,
+      routeFraction: Math.random(),
+      laneRatio: randomLaneRatio(),
     };
-  });
+    randomizeTrackPickupPosition(pickup, track, pickups);
+    pickups.push(pickup);
+  }
+  return pickups;
 }
 
-function isBodyItemPositionValid(x, y, track, bodyItems, pickups) {
+function isBodyItemPositionValid(item, x, y, track, bodyItems, pickups) {
+  const projection = projectOnTrack(track, x, y);
+  if (!projection || projection.distance > track.roadWidth * ONLINE_BODY_ITEM_VALID_ROAD_RATIO) {
+    return false;
+  }
   for (let i = 0; i < track.checkpoints.length; i += 1) {
     const cp = track.checkpoints[i];
     if (sqrDistance(x, y, cp.x, cp.y) < ONLINE_BODY_ITEM_TO_CHECKPOINT_MIN_DIST ** 2) {
@@ -188,50 +249,59 @@ function isBodyItemPositionValid(x, y, track, bodyItems, pickups) {
       return false;
     }
   }
-  for (const item of bodyItems) {
-    if (sqrDistance(x, y, item.x, item.y) < ONLINE_BODY_ITEM_MIN_SEPARATION ** 2) {
+  for (const other of bodyItems) {
+    if (!other || other.id === item.id) {
+      continue;
+    }
+    if (sqrDistance(x, y, other.x, other.y) < ONLINE_BODY_ITEM_MIN_SEPARATION ** 2) {
       return false;
     }
   }
   return true;
 }
 
-function createTrackBodyItems(track, trackId, pickups = []) {
+function randomizeTrackBodyItemPosition(item, track, bodyItems = [], pickups = []) {
+  const baseFraction = Number.isFinite(item.routeFraction) ? item.routeFraction : Math.random();
+  const baseLaneRatio = Number.isFinite(item.laneRatio) ? item.laneRatio : randomLaneRatio();
+  let chosen = null;
+
+  for (let attempt = 0; attempt < ONLINE_BODY_ITEM_ROUTE_ATTEMPTS; attempt += 1) {
+    const attemptFraction = mod1(baseFraction + (Math.random() - 0.5) * ONLINE_BODY_ITEM_FRACTION_JITTER);
+    const placement = placeTrackObject(track, attemptFraction, randomLaneRatio());
+    if (isBodyItemPositionValid(item, placement.x, placement.y, track, bodyItems, pickups)) {
+      chosen = placement;
+      break;
+    }
+  }
+
+  if (!chosen) {
+    chosen = placeTrackObject(track, baseFraction, baseLaneRatio);
+  }
+
+  item.x = chosen.x;
+  item.y = chosen.y;
+  item.routeFraction = chosen.fraction;
+  item.laneRatio = chosen.laneRatio;
+}
+
+function createTrackBodyItems(track, pickups = []) {
   const items = [];
-  const rng = createSeededRng(hashString(`online_body_${trackId || "track"}`));
-  const baseOffset = rng();
-  const bodyItemTypes = buildBalancedBodyItemTypes(ONLINE_BODY_ITEM_COUNT, rng);
+  const bodyItemTypes = buildBalancedBodyItemTypes(ONLINE_BODY_ITEM_COUNT);
 
   for (let i = 0; i < ONLINE_BODY_ITEM_COUNT; i += 1) {
-    let chosen = null;
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      const fraction = mod1(baseOffset + i / ONLINE_BODY_ITEM_COUNT + (rng() - 0.5) * 0.08);
-      const sample = sampleTrack(track, fraction);
-      const normal = { x: -sample.tangent.y, y: sample.tangent.x };
-      const laneRatio = randomLaneRatioFromRng(rng);
-      const lateral = track.roadWidth * laneRatio;
-      const x = sample.x + normal.x * lateral;
-      const y = sample.y + normal.y * lateral;
-      if (isBodyItemPositionValid(x, y, track, items, pickups)) {
-        chosen = { x, y };
-        break;
-      }
-    }
-
-    if (!chosen) {
-      const fallbackSample = sampleTrack(track, mod1(baseOffset + i / ONLINE_BODY_ITEM_COUNT));
-      chosen = { x: fallbackSample.x, y: fallbackSample.y };
-    }
-
-    items.push({
+    const item = {
       id: `body_item_${i + 1}`,
       type: bodyItemTypes[i] || "APPLE",
-      x: chosen.x,
-      y: chosen.y,
+      x: 0,
+      y: 0,
       radius: 11,
       active: true,
       respawnAtMs: 0,
-    });
+      routeFraction: Math.random(),
+      laneRatio: randomLaneRatio(),
+    };
+    randomizeTrackBodyItemPosition(item, track, items, pickups);
+    items.push(item);
   }
 
   return items;
@@ -252,8 +322,8 @@ export class RaceRoom extends Room {
     this.lapLengthMeters = Math.max(DEFAULT_MIN_LAP_LENGTH, rawLapLength);
     this.trackLengthMeters = this.lapLengthMeters * this.lapsToFinish;
 
-    this.pickups = this.trackRuntime ? createTrackPickups(this.trackRuntime, this.trackId) : [];
-    this.bodyItems = this.trackRuntime ? createTrackBodyItems(this.trackRuntime, this.trackId, this.pickups) : [];
+    this.pickups = this.trackRuntime ? createTrackPickups(this.trackRuntime) : [];
+    this.bodyItems = this.trackRuntime ? createTrackBodyItems(this.trackRuntime, this.pickups) : [];
 
     this.players = new Map();
     this.phase = "lobby";
@@ -519,11 +589,13 @@ export class RaceRoom extends Room {
   updateObjectRespawns(nowMs) {
     for (const pickup of this.pickups) {
       if (!pickup.active && safeNumber(pickup.respawnAtMs, 0) <= nowMs) {
+        randomizeTrackPickupPosition(pickup, this.trackRuntime, this.pickups);
         pickup.active = true;
       }
     }
     for (const item of this.bodyItems) {
       if (!item.active && safeNumber(item.respawnAtMs, 0) <= nowMs) {
+        randomizeTrackBodyItemPosition(item, this.trackRuntime, this.bodyItems, this.pickups);
         item.active = true;
       }
     }
