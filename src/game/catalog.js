@@ -90,7 +90,7 @@ export const NPC_PROFILES = [
 const TRACK_DEFS_ALL = [
   {
     id: "canyon_loop",
-    name: "Canyon Loop",
+    name: "Каньонная петля",
     subtitle: "Быстрая трасса с затяжными связками",
     roadWidth: 52,
     outsideWidth: 90,
@@ -281,7 +281,7 @@ const TRACK_DEFS_ALL = [
   },
   {
     id: "switchback_run",
-    name: "Switchback Run",
+    name: "Серпантин",
     subtitle: "Больше смен темпа и двойные апексы",
     roadWidth: 50,
     outsideWidth: 88,
@@ -552,7 +552,7 @@ const TRACK_DEFS_ALL = [
   },
   {
     id: "twin_fang",
-    name: "Twin Fang",
+    name: "Двойной клык",
     subtitle: "Почти восьмерка с коварными перекладками",
     roadWidth: 48,
     outsideWidth: 86,

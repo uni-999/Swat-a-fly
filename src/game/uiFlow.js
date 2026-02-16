@@ -1202,14 +1202,14 @@ export function createUiFlowApi({
     for (const track of TRACK_DEFS) {
       const best = loadBestTime(track.id);
       const card = document.createElement("button");
-      card.className = "card";
+      card.className = "card card--track";
       card.type = "button";
       card.innerHTML = `
       <h3>${track.name}</h3>
       <p>${track.subtitle}</p>
       <ul>
-        <li>Best local: ${Number.isFinite(best) ? formatMs(best) : "-"}</li>
-        <li>Road width: ${track.roadWidth}</li>
+        <li>Лучшее локальное: ${Number.isFinite(best) ? formatMs(best) : "-"}</li>
+        <li>Ширина трассы: ${track.roadWidth}</li>
       </ul>
       `;
       bindPress(card, () => {
