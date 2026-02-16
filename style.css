@@ -194,6 +194,12 @@ body.race-screen-active .app-header h1.title-snake-wave {
   padding: 22px 22px;
 }
 
+#screen-leaderboard .panel {
+  max-width: 1280px;
+  width: min(1280px, 96vw);
+  margin: 0 auto;
+}
+
 #screen-main .menu-panel .btn {
   font-size: 1.05rem;
   padding: 13px 16px;
