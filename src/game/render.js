@@ -10,6 +10,8 @@ import { drawRacers, syncRacerRenderSprites, syncRacerLabels } from "./renderRac
 export function renderRace(scene, race, nowMs, helpers = {}) {
   const formatMs = helpers.formatMs || ((value) => String(value ?? ""));
   const getRacerMotionHeading = helpers.getRacerMotionHeading || (() => null);
+  const t = typeof helpers.t === "function" ? helpers.t : (key) => key;
+  const localizeTrack = typeof helpers.localizeTrack === "function" ? helpers.localizeTrack : (track) => track;
   const g = scene.graphics;
   const hasTrackBackdrop = ensureTrackBackdrop(scene, race);
   drawBackground(g, { skipBase: hasTrackBackdrop });
@@ -18,12 +20,20 @@ export function renderRace(scene, race, nowMs, helpers = {}) {
   syncRacerRenderSprites(scene, race.racers, true, getRacerMotionHeading);
   syncRacerLabels(scene, race.racers, true);
 
-  const phaseText = race.phase === "countdown" ? "Отсчёт" : race.phase === "running" ? "Гонка" : "Финиш";
+  const phaseText =
+    race.phase === "rules"
+      ? t("race.phase.rules")
+      : race.phase === "countdown"
+        ? t("race.phase.countdown")
+        : race.phase === "running"
+          ? t("race.phase.running")
+          : t("race.phase.finished");
+  const localizedTrack = localizeTrack(race.trackDef || {});
   scene.infoText.setVisible(true);
   scene.infoText.setText([
-    `Трасса: ${race.trackDef.name}`,
-    `Фаза: ${phaseText}`,
-    `Время: ${formatMs(Math.max(0, nowMs - race.raceStartMs))}`,
+    `${t("race.info.track")}: ${localizedTrack?.name || race.trackDef?.name || "-"}`,
+    `${t("race.info.phase")}: ${phaseText}`,
+    `${t("race.info.time")}: ${formatMs(Math.max(0, nowMs - race.raceStartMs))}`,
   ]);
 }
 

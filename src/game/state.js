@@ -14,6 +14,7 @@ export const ui = {
   modeClassic: document.getElementById("mode-classic"),
   modeDebug: document.getElementById("mode-debug"),
   modeNote: document.getElementById("mode-note"),
+  languageButton: document.getElementById("btn-language"),
   playerNameInput: document.getElementById("player-name-input"),
   rulesButton: document.getElementById("btn-rules"),
   rulesModal: document.getElementById("rules-modal"),
@@ -50,6 +51,8 @@ export const ui = {
 export const state = {
   currentScreen: "main",
   playMode: "offline",
+  language: "ru",
+  languageOverridden: false,
   playerName: "",
   selectedSnakeId: null,
   selectedTrackId: null,
@@ -112,8 +115,13 @@ export function updateOfflineModeUi() {
     ui.modeDebug.classList.toggle("mode-active", !classicActive);
   }
   if (ui.modeNote) {
+    const language = String(state.language || "ru").toLowerCase();
     ui.modeNote.textContent = classicActive
-      ? "Режим классики: вы управляете змеёй, остальные 3 - боты."
-      : "Режим отладки: все 4 змеи на автопилоте.";
+      ? language === "en"
+        ? "Classic mode: you control one snake, the other 3 are bots."
+        : "Режим классики: вы управляете змеёй, остальные 3 - боты."
+      : language === "en"
+        ? "Debug mode: all 4 snakes use autopilot."
+        : "Режим отладки: все 4 змеи на автопилоте.";
   }
 }

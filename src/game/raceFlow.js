@@ -1,6 +1,5 @@
 import {
   RACE_RULES_SPLASH_MS,
-  RACE_RULES_SPLASH_TEXT,
   RACE_COUNTDOWN_TOTAL_MS,
   RACE_COUNTDOWN_SECONDS,
   BODY_CROSSING_START_GRACE_MS,
@@ -11,25 +10,20 @@ import {
   RACE_TIMEOUT_MS,
   STORAGE_PREFIX,
 } from "./config.js";
-import { SNAKES } from "./catalog.js";
 import { clamp } from "./utils.js";
+import { localizeSnakeById } from "./i18n.js";
 
-const snakeNameById = new Map(
-  (Array.isArray(SNAKES) ? SNAKES : [])
-    .filter((snake) => snake?.id && snake?.name)
-    .map((snake) => [String(snake.id).toLowerCase(), String(snake.name)])
-);
 const TOUCH_AIM_TURN_GAIN = 1.35;
 const TOUCH_AIM_DEADZONE = 0.08;
 
-function resolveSnakeName(rawSnakeId) {
+function resolveSnakeName(rawSnakeId, state, tr) {
   const normalized = String(rawSnakeId ?? "")
     .trim()
     .toLowerCase();
   if (!normalized) {
-    return "Змея";
+    return tr("fallback.snake");
   }
-  return snakeNameById.get(normalized) || String(rawSnakeId);
+  return localizeSnakeById(state, normalized, String(rawSnakeId || normalized));
 }
 
 function shortestAngleDelta(current, target) {
@@ -46,6 +40,7 @@ function shortestAngleDelta(current, target) {
 export function createRaceFlowApi({
   ui,
   state,
+  t,
   ensureAlwaysMoveSpeed,
   updateBodySegmentsForRace,
   updatePickups,
@@ -75,6 +70,8 @@ export function createRaceFlowApi({
   formatMs,
   formatRacerProgressLabel,
 } = {}) {
+  const tr = typeof t === "function" ? t : (key) => key;
+
   function updateRace(race, nowMs, dt) {
     if (race.phase === "rules") {
       const remain = Math.max(0, RACE_RULES_SPLASH_MS - (nowMs - race.rulesStartMs));
@@ -83,7 +80,7 @@ export function createRaceFlowApi({
         race.countdownStartMs = nowMs;
         race.countdownLastSecond = null;
       } else {
-        showOverlayMessage(RACE_RULES_SPLASH_TEXT, "overlay-rules", "#ffe4bd");
+        showOverlayMessage(tr("race.goalOverlay"), "overlay-rules", "#ffe4bd");
       }
       updateBodySegmentsForRace(race, nowMs);
       updateHud(race, nowMs);
@@ -106,7 +103,7 @@ export function createRaceFlowApi({
           racer.stallWatch = null;
           ensureAlwaysMoveSpeed(racer);
         }
-        showOverlayMessage("GO", "overlay-go", "#8eff84");
+        showOverlayMessage(tr("race.go"), "overlay-go", "#8eff84");
       } else {
         const sec = clamp(Math.ceil(remain / 1000), 1, RACE_COUNTDOWN_SECONDS);
         if (race.countdownLastSecond !== sec) {
@@ -195,7 +192,7 @@ export function createRaceFlowApi({
     race.phase = "finished";
     race.finishedAtMs = nowMs;
     race.overlayUntilMs = nowMs + 1300;
-    showOverlayMessage("FINISH", "overlay-finish", "#ffb17f");
+    showOverlayMessage(tr("race.finish"), "overlay-finish", "#ffb17f");
   }
 
   function finalizeResults(race) {
@@ -204,9 +201,10 @@ export function createRaceFlowApi({
     state.lastResults = ordered.map((racer, index) => ({
       rank: index + 1,
       name: racer.name,
-      snake: resolveSnakeName(racer.typeId),
+      snake: resolveSnakeName(racer.typeId, state, tr),
       timeMs: racer.finishTimeMs,
       completedLap: Boolean(racer.completedLap),
+      progressMeters: Number.isFinite(Number(racer.progress)) ? Math.round(Math.max(0, Number(racer.progress))) : null,
       progressLabel: formatRacerProgressLabel(race, racer),
     }));
     persistBestTimeFromRace(race);
@@ -231,14 +229,18 @@ export function createRaceFlowApi({
   function renderResultsTable() {
     ui.resultsBody.innerHTML = "";
     for (const row of state.lastResults) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
+      const trRow = document.createElement("tr");
+      const progressLabel =
+        Number.isFinite(Number(row?.progressMeters)) && Number(row.progressMeters) >= 0
+          ? tr("results.progressMeters", { value: Math.round(Number(row.progressMeters)) })
+          : row.progressLabel;
+      trRow.innerHTML = `
       <td>${row.rank}</td>
       <td>${row.name}</td>
-      <td>${resolveSnakeName(row.snake)}</td>
-      <td>${row.completedLap ? formatMs(row.timeMs) : row.progressLabel}</td>
+      <td>${resolveSnakeName(row.snake, state, tr)}</td>
+      <td>${row.completedLap ? formatMs(row.timeMs) : progressLabel}</td>
     `;
-      ui.resultsBody.appendChild(tr);
+      ui.resultsBody.appendChild(trRow);
     }
   }
 

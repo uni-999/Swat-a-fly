@@ -17,15 +17,24 @@ export function createUiFlowApi({
   loadBestTime,
   formatMs,
   RESTART_DEBOUNCE_MS,
+  t,
+  localizeSnake,
+  localizeTrack,
+  toggleLanguage,
+  getLanguageToggleLabel,
 } = {}) {
+  const tr = typeof t === "function" ? t : (key) => key;
+  const localizeSnakeText = typeof localizeSnake === "function" ? localizeSnake : (snake) => snake;
+  const localizeTrackText = typeof localizeTrack === "function" ? localizeTrack : (track) => track;
+  const switchLanguage = typeof toggleLanguage === "function" ? toggleLanguage : () => state.language;
+  const readLanguageToggleLabel =
+    typeof getLanguageToggleLabel === "function" ? getLanguageToggleLabel : () => "EN";
   const PLAYER_NAME_STORAGE_KEY = "polzunki_player_name_v1";
   const PLAYER_NAME_MAX_LENGTH = 24;
-  const DEFAULT_PLAYER_NAME = "Игрок";
   const ONLINE_ROOM_ID_MAX_LENGTH = 64;
   const ONLINE_INPUT_PUSH_INTERVAL_MS = 50;
   const ONLINE_INPUT_KEEPALIVE_MS = 220;
   const LEADERBOARD_LIMIT = 20;
-  const RULES_GOAL_TEXT = "ЦЕЛЬ: ПРОЙТИ 3 КРУГА НА МАКСИМАЛЬНОЙ СКОРОСТИ";
   const ONLINE_COUNTDOWN_MAX_SECONDS = 3;
   const COUNTDOWN_BURST_CLASS = "countdown-burst";
   const TOUCH_JOYSTICK_RADIUS_PX = 46;
@@ -45,23 +54,18 @@ export function createUiFlowApi({
   let rulesModalOpen = false;
   let aboutModalOpen = false;
   let leaderboardLoading = false;
-  const snakeNameById = new Map(
-    (Array.isArray(SNAKES) ? SNAKES : [])
-      .filter((snake) => snake?.id && snake?.name)
-      .map((snake) => [String(snake.id).toLowerCase(), String(snake.name)])
-  );
-
   function resolveSnakeName(rawSnakeId) {
     const normalized = String(rawSnakeId ?? "")
       .trim()
       .toLowerCase();
     if (!normalized) {
-      return "Змея";
+      return tr("fallback.snake");
     }
     if (normalized === "online") {
-      return "Онлайн";
+      return tr("fallback.online");
     }
-    return snakeNameById.get(normalized) || String(rawSnakeId);
+    const localized = localizeSnakeText({ id: normalized, name: String(rawSnakeId || normalized) });
+    return localized?.name || String(rawSnakeId || normalized);
   }
 
   function normalizePlayerName(rawName) {
@@ -88,7 +92,7 @@ export function createUiFlowApi({
   }
 
   function getResolvedPlayerName() {
-    return normalizePlayerName(state.playerName) || DEFAULT_PLAYER_NAME;
+    return normalizePlayerName(state.playerName) || getDefaultPlayerName();
   }
 
   function applyPlayerNameFromInput() {
@@ -98,7 +102,7 @@ export function createUiFlowApi({
     }
 
     const normalized = normalizePlayerName(ui.playerNameInput.value);
-    const resolved = normalized || DEFAULT_PLAYER_NAME;
+    const resolved = normalized || getDefaultPlayerName();
     state.playerName = resolved;
     if (ui.playerNameInput.value !== normalized) {
       ui.playerNameInput.value = normalized;
@@ -108,7 +112,7 @@ export function createUiFlowApi({
 
   function initPlayerNameUi() {
     const normalizedStoredName = normalizePlayerName(loadStoredPlayerName());
-    state.playerName = normalizedStoredName || DEFAULT_PLAYER_NAME;
+    state.playerName = normalizedStoredName || getDefaultPlayerName();
 
     if (!ui.playerNameInput) {
       return;
@@ -118,6 +122,165 @@ export function createUiFlowApi({
     ui.playerNameInput.addEventListener("input", () => applyPlayerNameFromInput());
     ui.playerNameInput.addEventListener("change", () => applyPlayerNameFromInput());
     ui.playerNameInput.addEventListener("blur", () => applyPlayerNameFromInput());
+  }
+
+  function getDefaultPlayerName() {
+    return tr("fallback.player");
+  }
+
+  function setText(selector, key, vars = {}) {
+    const node = document.querySelector(selector);
+    if (node) {
+      node.textContent = tr(key, vars);
+    }
+  }
+
+  function setHtml(selector, key, vars = {}) {
+    const node = document.querySelector(selector);
+    if (node) {
+      node.innerHTML = tr(key, vars);
+    }
+  }
+
+  function setPlaceholder(selector, key, vars = {}) {
+    const node = document.querySelector(selector);
+    if (node) {
+      node.placeholder = tr(key, vars);
+    }
+  }
+
+  function applyStaticLocalizedTexts() {
+    document.title = tr("meta.title");
+    document.documentElement.lang = String(state.language || "ru");
+
+    const nextLangLabel = readLanguageToggleLabel();
+    if (ui.languageButton) {
+      ui.languageButton.textContent = nextLangLabel;
+      ui.languageButton.setAttribute("aria-label", tr("lang.toggleAria", { lang: nextLangLabel }));
+    }
+
+    setText(".app-header p", "header.subtitle");
+    setText("#btn-rules", "menu.rules");
+    setText("label[for='player-name-input'] > span", "menu.playerNameLabel");
+    setPlaceholder("#player-name-input", "menu.playerNamePlaceholder");
+    setText("#btn-offline", "menu.playOffline");
+    setText("#btn-online", "menu.playOnline");
+    setText("#btn-leaderboards", "menu.leaderboard");
+    setText("#btn-about", "menu.about");
+
+    setText("#screen-leaderboard h2", "leaderboard.title");
+    setText("label[for='leaderboard-track-select'] > span", "leaderboard.track");
+    setText("#leaderboard-refresh", "leaderboard.refresh");
+    if (!leaderboardLoading) {
+      setText("#leaderboard-status", "leaderboard.initial");
+    }
+    setText("#screen-leaderboard thead th:nth-child(2)", "leaderboard.header.player");
+    setText("#screen-leaderboard thead th:nth-child(3)", "leaderboard.header.track");
+    setText("#screen-leaderboard thead th:nth-child(4)", "leaderboard.header.bestTime");
+    setText("#leaderboard-back", "common.back");
+
+    setText("#screen-snake h2", "snake.title");
+    setText("#mode-classic", "snake.modeClassicBtn");
+    setText("#mode-debug", "snake.modeDebugBtn");
+    if (ui.modeNote) {
+      ui.modeNote.textContent =
+        state.offlineMode === OFFLINE_MODES.CLASSIC ? tr("snake.modeClassicNote") : tr("snake.modeDebugNote");
+    }
+    setText("#snake-back", "common.back");
+    setText("#snake-next", "common.next");
+
+    setText("#screen-track h2", "track.title");
+    setText("label[for='online-room-select'] > span", "track.onlineRoomLabel");
+    setPlaceholder("#online-room-id-input", "track.onlineRoomPlaceholder");
+    setText("#online-room-refresh", "track.onlineRoomRefresh");
+    const autoOption = document.querySelector("#online-room-select option[value='']");
+    if (autoOption) {
+      autoOption.textContent = tr("track.onlineAuto");
+    }
+    setText("#track-back", "common.back");
+    setText("#track-start", "common.start");
+
+    setText("#screen-race .hud-box--time > span", "hud.time");
+    setText("#screen-race .hud-box--speed > span", "hud.speed");
+    setText("#screen-race .hud-box--position > span", "hud.position");
+    setText("#screen-race .hud-box--effect > span", "hud.effect");
+    setText("#screen-race .hud-box--standings > span", "hud.order");
+    setText("#screen-race .controls p:nth-child(1)", "hud.controls1");
+    setText("#screen-race .controls p:nth-child(2)", "hud.controls2");
+    setText("#screen-race .touch-controls__hint", "hud.touchHint");
+
+    setText("#screen-results h2", "results.title");
+    setText("#screen-results thead th:nth-child(2)", "results.header.participant");
+    setText("#screen-results thead th:nth-child(3)", "results.header.snake");
+    setText("#screen-results thead th:nth-child(4)", "results.header.finish");
+    setText("#results-retry", "common.retry");
+    setText("#results-next", "common.nextTrack");
+    setText("#results-back", "common.back");
+
+    setText("#rules-modal-title", "rules.title");
+    setHtml("#rules-modal .rules-modal__goal:nth-of-type(1)", "rules.goal1");
+    setHtml("#rules-modal .rules-modal__goal:nth-of-type(2)", "rules.goal2");
+    setText("#rules-modal .rules-modal__panel h3:nth-of-type(1)", "rules.bodyTitle");
+    setText("#rules-modal .rules-modal__goal:nth-of-type(3)", "rules.bodyLong");
+    setText("#rules-modal .rules-modal__goal:nth-of-type(4)", "rules.bodyShort");
+    setText("#rules-modal .rules-modal__panel h3:nth-of-type(2)", "rules.snakesTitle");
+    setText("#rules-modal .rules-snake:nth-of-type(1) h4", "rules.speedster.title");
+    setText("#rules-modal .rules-snake:nth-of-type(1) > p", "rules.speedster.desc");
+    setText("#rules-modal .rules-snake:nth-of-type(1) li:nth-of-type(1)", "rules.speedster.p1");
+    setText("#rules-modal .rules-snake:nth-of-type(1) li:nth-of-type(2)", "rules.speedster.p2");
+    setText("#rules-modal .rules-snake:nth-of-type(2) h4", "rules.handler.title");
+    setText("#rules-modal .rules-snake:nth-of-type(2) > p", "rules.handler.desc");
+    setText("#rules-modal .rules-snake:nth-of-type(2) li:nth-of-type(1)", "rules.handler.p1");
+    setText("#rules-modal .rules-snake:nth-of-type(2) li:nth-of-type(2)", "rules.handler.p2");
+    setText("#rules-modal .rules-snake:nth-of-type(3) h4", "rules.bully.title");
+    setText("#rules-modal .rules-snake:nth-of-type(3) > p", "rules.bully.desc");
+    setText("#rules-modal .rules-snake:nth-of-type(3) li:nth-of-type(1)", "rules.bully.p1");
+    setText("#rules-modal .rules-snake:nth-of-type(3) li:nth-of-type(2)", "rules.bully.p2");
+    setText("#rules-modal .rules-snake:nth-of-type(4) h4", "rules.trickster.title");
+    setText("#rules-modal .rules-snake:nth-of-type(4) > p", "rules.trickster.desc");
+    setText("#rules-modal .rules-snake:nth-of-type(4) li:nth-of-type(1)", "rules.trickster.p1");
+    setText("#rules-modal .rules-snake:nth-of-type(4) li:nth-of-type(2)", "rules.trickster.p2");
+    setText("#rules-modal .rules-modal__panel h3:nth-of-type(3)", "rules.objectsTitle");
+    setHtml("#rules-modal .rules-item:nth-of-type(1) p", "rules.item.boost");
+    setHtml("#rules-modal .rules-item:nth-of-type(2) p", "rules.item.shield");
+    setHtml("#rules-modal .rules-item:nth-of-type(3) p", "rules.item.apple");
+    setHtml("#rules-modal .rules-item:nth-of-type(4) p", "rules.item.oil");
+    setHtml("#rules-modal .rules-item:nth-of-type(5) p", "rules.item.bomb");
+    setHtml("#rules-modal .rules-item:nth-of-type(6) p", "rules.item.cactus");
+
+    if (ui.rulesClose) {
+      ui.rulesClose.setAttribute("aria-label", tr("menu.rules"));
+    }
+
+    setText("#about-modal-title", "about.title");
+    setText("#about-modal .about-modal__panel p", "about.text");
+    if (ui.aboutClose) {
+      ui.aboutClose.setAttribute("aria-label", tr("menu.about"));
+    }
+  }
+
+  function initLanguageUi() {
+    applyStaticLocalizedTexts();
+    if (!ui.languageButton) {
+      return;
+    }
+    bindPress(ui.languageButton, () => {
+      switchLanguage();
+      applyStaticLocalizedTexts();
+      renderSnakeCards();
+      renderTrackCards();
+      renderOnlineRoomOptions();
+      renderLeaderboardTrackOptions();
+      if (state.currentScreen === "leaderboard") {
+        void refreshLeaderboard({ silent: true });
+      }
+      if (state.currentScreen === "results") {
+        renderResultsRows(state.lastResults || []);
+      }
+      if (state.playMode === "online") {
+        syncOnlinePhaseOverlay();
+      }
+    });
   }
 
   function syncModalBodyLock() {
@@ -408,6 +571,19 @@ export function createUiFlowApi({
       .replace(/-/g, "_");
   }
 
+  function localizeOnlinePhaseLabel(rawPhase) {
+    const phase = String(rawPhase || "")
+      .trim()
+      .toLowerCase();
+    if (!phase) {
+      return tr("online.phase.unknown");
+    }
+    if (["lobby", "rules", "countdown", "running", "finished"].includes(phase)) {
+      return tr(`online.phase.${phase}`);
+    }
+    return phase;
+  }
+
   function resolveTrackDef(trackId) {
     const normalized = normalizeTrackId(trackId);
     return TRACK_DEFS.find((track) => normalizeTrackId(track.id) === normalized) || TRACK_DEFS[0] || null;
@@ -436,9 +612,9 @@ export function createUiFlowApi({
     wrapper.hidden = true;
     wrapper.innerHTML = `
       <label class="menu-field" for="online-room-select">
-        <span>Комната (онлайн)</span>
+        <span>${tr("track.onlineRoomLabel")}</span>
         <select id="online-room-select">
-          <option value="">Авто: подключиться или создать</option>
+          <option value="">${tr("track.onlineAuto")}</option>
         </select>
       </label>
       <div class="online-room-actions">
@@ -448,9 +624,9 @@ export function createUiFlowApi({
           maxlength="64"
           autocomplete="off"
           spellcheck="false"
-          placeholder="Или введите ID комнаты вручную"
+          placeholder="${tr("track.onlineRoomPlaceholder")}"
         >
-        <button id="online-room-refresh" class="btn ghost" type="button">Обновить список</button>
+        <button id="online-room-refresh" class="btn ghost" type="button">${tr("track.onlineRoomRefresh")}</button>
       </div>
     `;
     trackPanel.insertBefore(wrapper, trackCards);
@@ -498,7 +674,7 @@ export function createUiFlowApi({
 
     const autoOption = document.createElement("option");
     autoOption.value = "";
-    autoOption.textContent = "Авто: подключиться или создать";
+    autoOption.textContent = tr("track.onlineAuto");
     ui.onlineRoomSelect.appendChild(autoOption);
 
     for (const room of rooms) {
@@ -511,7 +687,7 @@ export function createUiFlowApi({
         Number.isFinite(room.clients) && Number.isFinite(room.maxClients) && room.maxClients > 0
           ? `${room.clients}/${room.maxClients}`
           : "-/-";
-      const phaseLabel = room.phase || "lobby";
+      const phaseLabel = localizeOnlinePhaseLabel(room.phase || "lobby");
       option.textContent = `${room.roomId} (${occupancy}, ${phaseLabel})`;
       ui.onlineRoomSelect.appendChild(option);
     }
@@ -558,7 +734,7 @@ export function createUiFlowApi({
       state.onlineRoomOptionsTrackId = trackId;
       renderOnlineRoomOptions();
       if (!silent) {
-        showToast(`Не удалось получить список комнат: ${result?.error || "unknown_error"}`);
+        showToast(tr("toast.onlineRoomsFailed", { error: result?.error || "unknown_error" }));
       }
       return;
     }
@@ -567,7 +743,7 @@ export function createUiFlowApi({
     state.onlineRoomOptionsTrackId = trackId;
     renderOnlineRoomOptions();
     if (!silent) {
-      showToast(`Комнат найдено: ${state.onlineRoomOptions.length}`);
+      showToast(tr("toast.onlineRoomsFound", { count: state.onlineRoomOptions.length }));
     }
   }
 
@@ -629,7 +805,7 @@ export function createUiFlowApi({
     for (const track of TRACK_DEFS) {
       const option = document.createElement("option");
       option.value = track.id;
-      option.textContent = track.name;
+      option.textContent = localizeTrackText(track)?.name || track.name;
       ui.leaderboardTrackSelect.appendChild(option);
     }
     if (state.leaderboardTrackId) {
@@ -643,39 +819,43 @@ export function createUiFlowApi({
     }
     ui.leaderboardBody.innerHTML = "";
     if (!rows.length) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="4">Нет записей для выбранной трассы.</td>`;
-      ui.leaderboardBody.appendChild(tr);
+      const rowEl = document.createElement("tr");
+      rowEl.innerHTML = `<td colspan="4">${tr("leaderboard.empty")}</td>`;
+      ui.leaderboardBody.appendChild(rowEl);
       return;
     }
     rows.forEach((row, index) => {
-      const tr = document.createElement("tr");
+      const rowEl = document.createElement("tr");
       const rowTrackDef = resolveTrackDef(row?.metadata?.track_id || row?.trackId || state.leaderboardTrackId);
-      const rowTrackName = rowTrackDef?.name || state.leaderboardTrackId || "-";
-      tr.innerHTML = `
+      const rowTrackName =
+        localizeTrackText(rowTrackDef || row?.metadata?.track_id || row?.trackId || "")?.name ||
+        state.leaderboardTrackId ||
+        "-";
+      rowEl.innerHTML = `
       <td>${Number.isFinite(row?.rank) ? row.rank : index + 1}</td>
       <td>${row?.username || "-"}</td>
       <td>${rowTrackName}</td>
       <td>${Number.isFinite(row?.score) ? formatMs(row.score) : "-"}</td>
     `;
-      ui.leaderboardBody.appendChild(tr);
+      ui.leaderboardBody.appendChild(rowEl);
     });
   }
 
   async function refreshLeaderboard({ silent = false } = {}) {
     if (!ui.leaderboardTrackSelect || !ui.leaderboardBody) {
       if (!silent) {
-        showToast("Экран таблицы лидеров недоступен в этой сборке интерфейса.");
+        showToast(tr("toast.leaderboardScreenUnavailable"));
       }
       return;
     }
 
     const trackDef = resolveTrackDef(getResolvedLeaderboardTrackId());
     if (!trackDef) {
-      setLeaderboardStatus("Не удалось определить трассу.", { error: true });
+      setLeaderboardStatus(tr("leaderboard.unavailable"), { error: true });
       renderLeaderboardRows([]);
       return;
     }
+    const localizedTrackName = localizeTrackText(trackDef)?.name || trackDef.name || "-";
 
     state.leaderboardTrackId = trackDef.id;
     ui.leaderboardTrackSelect.value = trackDef.id;
@@ -684,10 +864,10 @@ export function createUiFlowApi({
     }
 
     if (typeof getTrackLeaderboard !== "function") {
-      setLeaderboardStatus("Сервис лидерборда недоступен.", { error: true });
+      setLeaderboardStatus(tr("leaderboard.unavailable"), { error: true });
       renderLeaderboardRows([]);
       if (!silent) {
-        showToast("Не удалось загрузить лидерборд: клиентский API не подключен.");
+        showToast(tr("toast.leaderboardUnavailable", { error: "client_api_unavailable" }));
       }
       return;
     }
@@ -696,7 +876,7 @@ export function createUiFlowApi({
     if (ui.leaderboardRefresh) {
       ui.leaderboardRefresh.disabled = true;
     }
-    setLeaderboardStatus(`Загрузка: ${trackDef.name}...`);
+    setLeaderboardStatus(tr("leaderboard.loading", { track: localizedTrackName }));
 
     const result = await getTrackLeaderboard({
       trackId: trackDef.id,
@@ -710,9 +890,10 @@ export function createUiFlowApi({
 
     if (!result?.ok) {
       renderLeaderboardRows([]);
-      setLeaderboardStatus(`Не удалось загрузить таблицу: ${result?.error || "unknown_error"}`, { error: true });
+      const errorLabel = result?.error || "unknown_error";
+      setLeaderboardStatus(tr("leaderboard.loadFailed", { error: errorLabel }), { error: true });
       if (!silent) {
-        showToast(`Лидерборд недоступен: ${result?.error || "unknown_error"}`);
+        showToast(tr("toast.leaderboardUnavailable", { error: errorLabel }));
       }
       return;
     }
@@ -720,12 +901,12 @@ export function createUiFlowApi({
     const rows = Array.isArray(result.records) ? result.records : [];
     renderLeaderboardRows(rows);
     if (result.disabled) {
-      setLeaderboardStatus("Nakama отключен: таблица пока пустая.");
+      setLeaderboardStatus(tr("leaderboard.disabled"));
     } else {
-      setLeaderboardStatus(`Трасса: ${trackDef.name}. Записей: ${rows.length}.`);
+      setLeaderboardStatus(tr("leaderboard.loaded", { track: localizedTrackName, count: rows.length }));
     }
     if (!silent) {
-      showToast(`Лидерборд обновлён: ${rows.length} записей.`);
+      showToast(tr("toast.leaderboardUpdated", { count: rows.length }));
     }
   }
 
@@ -740,10 +921,18 @@ export function createUiFlowApi({
       <td>${row.rank}</td>
       <td>${row.name}</td>
       <td>${resolveSnakeName(row.snake)}</td>
-      <td>${row.completedLap ? formatMs(row.timeMs) : row.progressLabel}</td>
+      <td>${row.completedLap ? formatMs(row.timeMs) : readResultsProgressLabel(row)}</td>
     `;
       ui.resultsBody.appendChild(tr);
     }
+  }
+
+  function readResultsProgressLabel(row) {
+    const meters = Number(row?.progressMeters);
+    if (Number.isFinite(meters) && meters >= 0) {
+      return tr("results.progressMeters", { value: Math.round(meters) });
+    }
+    return row?.progressLabel || tr("results.progressMeters", { value: 0 });
   }
 
   function buildOnlineResultsRows(snapshot) {
@@ -754,7 +943,7 @@ export function createUiFlowApi({
         const hasFinishTime = Number.isFinite(finishTimeMs) && finishTimeMs >= 0;
         const progress = Math.max(0, Number(player?.progress) || 0);
         return {
-          name: String(player?.displayName || "Игрок"),
+          name: String(player?.displayName || tr("fallback.player")),
           snake: resolveSnakeName(player?.typeId || player?.snakeId || "online"),
           finishTimeMs: hasFinishTime ? Math.floor(finishTimeMs) : null,
           progress,
@@ -778,7 +967,8 @@ export function createUiFlowApi({
       snake: entry.snake,
       completedLap: Number.isFinite(entry.finishTimeMs),
       timeMs: Number.isFinite(entry.finishTimeMs) ? entry.finishTimeMs : NaN,
-      progressLabel: `Прогресс: ${Math.round(entry.progress)} м`,
+      progressMeters: Math.round(entry.progress),
+      progressLabel: tr("results.progressMeters", { value: Math.round(entry.progress) }),
     }));
   }
 
@@ -861,9 +1051,9 @@ export function createUiFlowApi({
     showScreen("results");
     void disconnectOnlineRace?.();
     if (stalledRunningFallback && !explicitFinished) {
-      showToast("Онлайн-заезд завершен по прогрессу: движения нет слишком долго.");
+      showToast(tr("toast.onlineStalledFinish"));
     } else {
-      showToast("Финиш онлайн-заезда: таблица результатов обновлена.");
+      showToast(tr("toast.onlineFinish"));
     }
   }
 
@@ -871,7 +1061,7 @@ export function createUiFlowApi({
     if (!ui.overlay) {
       return;
     }
-    ui.overlay.textContent = RULES_GOAL_TEXT;
+    ui.overlay.textContent = tr("race.goalOverlay");
     ui.overlay.classList.remove("countdown", COUNTDOWN_BURST_CLASS, "overlay-go", "overlay-finish");
     ui.overlay.classList.add("overlay-rules", "visible");
     ui.overlay.style.setProperty("--overlay-color", "#ffe4bd");
@@ -949,6 +1139,7 @@ export function createUiFlowApi({
 
   function wireUi() {
     initPlayerNameUi();
+    initLanguageUi();
     initRulesModalUi();
     initAboutModalUi();
     initTouchControlsUi();
@@ -962,13 +1153,13 @@ export function createUiFlowApi({
       resetOnlineFinishWatchers();
       void disconnectOnlineRace?.();
       showScreen("snake");
-      showToast("Офлайн-режим активирован.");
+      showToast(tr("toast.offlineActivated"));
     });
 
     bindPress(document.getElementById("btn-online"), () => {
       state.playMode = "online";
       showScreen("snake");
-      showToast("Онлайн MVP: выбери змею и трассу, затем нажми Старт для подключения к комнате.");
+      showToast(tr("toast.onlineHint"));
       if (state.onlineRoomOptionsTrackId !== state.selectedTrackId) {
         void refreshOnlineRooms({ silent: true });
       }
@@ -1159,6 +1350,7 @@ export function createUiFlowApi({
   function renderSnakeCards() {
     ui.snakeCards.innerHTML = "";
     for (const snake of SNAKES) {
+      const localizedSnake = localizeSnakeText(snake);
       const headSprite = getSnakeSpritePath(snake.id, "head.png");
       const segmentSprite = getSnakeSpritePath(snake.id, "segment.png");
       const card = document.createElement("button");
@@ -1171,17 +1363,17 @@ export function createUiFlowApi({
           <img class="snake-card__segment snake-card__segment--tail" src="${segmentSprite}" alt="">
           <img class="snake-card__segment snake-card__segment--mid" src="${segmentSprite}" alt="">
           <img class="snake-card__segment snake-card__segment--front" src="${segmentSprite}" alt="">
-          <img class="snake-card__head" src="${headSprite}" alt="${snake.name}">
+          <img class="snake-card__head" src="${headSprite}" alt="${localizedSnake.name}">
         </div>
         <div>
-          <h3 style="color:${snake.color}">${snake.name}</h3>
-          <p>${snake.flavor}</p>
+          <h3 style="color:${snake.color}">${localizedSnake.name}</h3>
+          <p>${localizedSnake.flavor}</p>
         </div>
       </div>
       <ul>
-        <li>Макс. скорость: ${Math.round(snake.stats.maxSpeed)}</li>
-        <li>Поворот: ${snake.stats.turnRate.toFixed(2)}</li>
-        <li>Штраф вне дороги: ${(snake.stats.offroadPenalty * 100).toFixed(0)}%</li>
+        <li>${tr("snake.stat.maxSpeed", { value: Math.round(snake.stats.maxSpeed) })}</li>
+        <li>${tr("snake.stat.turn", { value: snake.stats.turnRate.toFixed(2) })}</li>
+        <li>${tr("snake.stat.offroadPenalty", { value: (snake.stats.offroadPenalty * 100).toFixed(0) })}</li>
       </ul>
     `;
       bindPress(card, () => {
@@ -1207,16 +1399,17 @@ export function createUiFlowApi({
   function renderTrackCards() {
     ui.trackCards.innerHTML = "";
     for (const track of TRACK_DEFS) {
+      const localizedTrack = localizeTrackText(track);
       const best = loadBestTime(track.id);
       const card = document.createElement("button");
       card.className = "card card--track";
       card.type = "button";
       card.innerHTML = `
-      <h3>${track.name}</h3>
-      <p>${track.subtitle}</p>
+      <h3>${localizedTrack.name}</h3>
+      <p>${localizedTrack.subtitle}</p>
       <ul>
-        <li>Лучшее локальное: ${Number.isFinite(best) ? formatMs(best) : "-"}</li>
-        <li>Ширина трассы: ${track.roadWidth}</li>
+        <li>${tr("track.bestLocal", { value: Number.isFinite(best) ? formatMs(best) : "-" })}</li>
+        <li>${tr("track.roadWidth", { value: track.roadWidth })}</li>
       </ul>
       `;
       bindPress(card, () => {
@@ -1376,18 +1569,19 @@ export function createUiFlowApi({
       syncRaceMusic();
 
       const selectedSnake = SNAKES.find((item) => item.id === state.selectedSnakeId) || SNAKES[0];
+      const selectedSnakeLocalized = localizeSnakeText(selectedSnake);
       const selectedRoomId = getResolvedOnlineRoomId();
       state.onlineRoomId = selectedRoomId;
       const connectResult = await startOnlineRace?.({
         trackId: trackDef.id,
-        playerName: getResolvedPlayerName() || `Игрок (${selectedSnake.name})`,
+        playerName: getResolvedPlayerName() || `${tr("fallback.player")} (${selectedSnakeLocalized.name})`,
         roomId: selectedRoomId,
         snakeId: selectedSnake.id,
       });
 
       if (!connectResult?.ok) {
         showScreen("track");
-        showToast(`Не удалось подключиться к онлайн-комнате: ${connectResult?.error || "unknown_error"}`);
+        showToast(tr("toast.onlineConnectFailed", { error: connectResult?.error || "unknown_error" }));
         return false;
       }
 
@@ -1416,7 +1610,12 @@ export function createUiFlowApi({
 
       syncRaceMusic();
       const endpointLabel = connectResult.endpoint ? ` (${connectResult.endpoint})` : "";
-      showToast(`Онлайн: подключено к комнате ${connectResult.roomId || "-"}${endpointLabel}.`);
+      showToast(
+        tr("toast.onlineConnected", {
+          room: connectResult.roomId || "-",
+          endpoint: endpointLabel,
+        }),
+      );
       pushOnlineInput(true);
       return true;
     }
@@ -1433,9 +1632,9 @@ export function createUiFlowApi({
     syncRaceMusic();
 
     if (debugMode) {
-      showToast("DEBUG: 4 бота на автопилоте.");
+      showToast(tr("toast.debugRace"));
     } else {
-      showToast("Классический офлайн: 1 игрок + 3 бота.");
+      showToast(tr("toast.classicRace"));
     }
     return true;
   }

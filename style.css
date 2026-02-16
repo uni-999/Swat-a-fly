@@ -137,6 +137,19 @@ body {
   font-size: 0.98rem;
 }
 
+.btn-language {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 62px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  letter-spacing: 0.09em;
+  line-height: 1;
+  z-index: 2;
+}
+
 body.race-screen-active .app-header {
   margin-bottom: clamp(-24px, -2.2vw, -10px);
   z-index: 40;
@@ -1245,6 +1258,14 @@ body.modal-open {
 @media (max-width: 680px) {
   .app {
     padding: 16px 10px 20px;
+  }
+
+  .btn-language {
+    top: -4px;
+    right: 2px;
+    min-width: 56px;
+    padding: 7px 10px;
+    font-size: 0.76rem;
   }
 
   .actions {

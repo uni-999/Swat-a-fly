@@ -6,7 +6,7 @@ import {
 } from "./config.js";
 import { renderRace as renderRaceView, renderIdle as renderIdleView } from "./render.js";
 
-export function createCoreUiApi({ ui, state, getRacerMotionHeading } = {}) {
+export function createCoreUiApi({ ui, state, getRacerMotionHeading, t, localizeTrack } = {}) {
   function showOverlayMessage(text, mode = "", color = null) {
     ui.overlay.textContent = text;
     ui.overlay.classList.remove("countdown", COUNTDOWN_BURST_ANIM_CLASS, "overlay-go", "overlay-finish", "overlay-rules");
@@ -31,7 +31,12 @@ export function createCoreUiApi({ ui, state, getRacerMotionHeading } = {}) {
   }
 
   function renderRace(scene, race, nowMs) {
-    return renderRaceView(scene, race, nowMs, { formatMs, getRacerMotionHeading });
+    return renderRaceView(scene, race, nowMs, {
+      formatMs,
+      getRacerMotionHeading,
+      t,
+      localizeTrack,
+    });
   }
 
   function renderIdle(scene) {

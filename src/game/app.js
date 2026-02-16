@@ -7,15 +7,16 @@ import {
   TRACK_DEFS,
 } from "./catalog.js";
 import { ui, state, isDebugMode, setOfflineMode, updateOfflineModeUi } from "./state.js";
+import { initLanguageState, t, localizeTrack, localizeSnake, toggleLanguage, getLanguageToggleLabel } from "./i18n.js";
 import { createRaceDurationStatsApi } from "./raceDurationStats.js";
 import { initSnakeTitleWave } from "./titleWave.js";
 import { createAiApi } from "./ai.js";
-import { createRaceFlowApi } from "./raceFlow.js?v=20260216_touch_drive_1";
+import { createRaceFlowApi } from "./raceFlow.js?v=20260216_i18n_2";
 import { createRaceState, randomizePickupPosition, randomizeBodyItemPosition } from "./raceSetup.js";
-import { createHudApi } from "./hud.js";
+import { createHudApi } from "./hud.js?v=20260216_i18n_2";
 import { createSceneApi } from "./scene.js?v=20260216_leaderboard_2";
-import { createUiFlowApi } from "./uiFlow.js?v=20260216_touch_drive_1";
-import { createCoreUiApi } from "./coreUi.js";
+import { createUiFlowApi } from "./uiFlow.js?v=20260216_i18n_2";
+import { createCoreUiApi } from "./coreUi.js?v=20260216_i18n_2";
 import { createOnlineRoomClientApi } from "./onlineRoomClient.js";
 import {
   stepFinishedRacer,
@@ -40,6 +41,11 @@ import {
 } from "./simulation.js";
 
 export function bootstrapApp() {
+  initLanguageState(state);
+  const tUi = (key, vars = {}) => t(state, key, vars);
+  const localizeTrackUi = (track) => localizeTrack(state, track);
+  const localizeSnakeUi = (snake) => localizeSnake(state, snake);
+
   const {
     showOverlayMessage,
     triggerCountdownBurst,
@@ -52,6 +58,8 @@ export function bootstrapApp() {
     ui,
     state,
     getRacerMotionHeading,
+    t: tUi,
+    localizeTrack: localizeTrackUi,
   });
 
   const { maybePrefetchRemoteRaceDurationStats, getTitleCrawlDurationMs, updateRaceDurationStats } =
@@ -64,6 +72,8 @@ export function bootstrapApp() {
   });
   const { updateHud, formatRacerProgressLabel } = createHudApi({
     ui,
+    state,
+    t: tUi,
     computeStandings,
     getCurrentBodySegments,
     formatMs,
@@ -100,10 +110,16 @@ export function bootstrapApp() {
     loadBestTime,
     formatMs,
     RESTART_DEBOUNCE_MS,
+    t: tUi,
+    localizeSnake: localizeSnakeUi,
+    localizeTrack: localizeTrackUi,
+    toggleLanguage: () => toggleLanguage(state),
+    getLanguageToggleLabel: () => getLanguageToggleLabel(state),
   });
   const { updateRace } = createRaceFlowApi({
     ui,
     state,
+    t: tUi,
     ensureAlwaysMoveSpeed,
     updateBodySegmentsForRace,
     updatePickups,
