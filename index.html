@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ПОЛЗУНКИ</title>
+  <link rel="icon" href="/favicon.ico?v=20260216" sizes="16x16 32x32 48x48" type="image/x-icon">
+  <link rel="shortcut icon" href="/favicon.ico?v=20260216" type="image/x-icon">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700&display=swap" rel="stylesheet">
@@ -19,6 +21,7 @@
 
     <section id="screen-main" class="screen active">
       <div class="panel menu-panel">
+        <button id="btn-rules" class="btn ghost">Правила</button>
         <label class="menu-field" for="player-name-input">
           <span>Имя игрока (онлайн)</span>
           <input
@@ -32,8 +35,7 @@
         <button id="btn-offline" class="btn primary">Играть офлайн</button>
         <button id="btn-online" class="btn ghost">Играть онлайн</button>
         <button id="btn-leaderboards" class="btn ghost">Таблица лидеров</button>
-        <button id="btn-rules" class="btn ghost">Правила</button>
-        <button id="btn-settings" class="btn ghost">Настройки (скоро)</button>
+        <button id="btn-about" class="btn ghost">Об игре</button>
       </div>
     </section>
 
@@ -147,6 +149,12 @@
               <p>R: рестарт трассы</p>
             </div>
           </div>
+          <div id="touch-controls" class="touch-controls" hidden>
+            <div id="touch-joystick" class="touch-joystick" aria-label="Мобильный джойстик управления">
+              <div id="touch-joystick-knob" class="touch-joystick__knob"></div>
+            </div>
+            <p class="touch-controls__hint">Джойстик: вверх газ, вниз тормоз, в стороны поворот</p>
+          </div>
         </div>
       </div>
       <div id="race-overlay" class="race-overlay"></div>
@@ -186,6 +194,13 @@
         </p>
         <p class="rules-modal__goal">
           На старте есть короткий бриф, затем отсчёт <strong>3..2..1</strong> и GO.
+        </p>
+        <h3>Длина тела змеи</h3>
+        <p class="rules-modal__goal">
+          Длинное тело даёт стабильный темп: меньше штрафов к скорости и проще держать траекторию.
+        </p>
+        <p class="rules-modal__goal">
+          Короткое тело опасно: чем меньше сегментов, тем сильнее замедление и выше риск проиграть по времени.
         </p>
         <h3>Объекты на трассе</h3>
         <div class="rules-items-grid">
@@ -234,10 +249,24 @@
         </div>
       </section>
     </div>
+
+    <div id="about-modal" class="about-modal" hidden>
+      <div class="about-modal__backdrop" data-about-close></div>
+      <section class="about-modal__panel" role="dialog" aria-modal="true" aria-labelledby="about-modal-title">
+        <button id="about-close" class="about-modal__close" type="button" aria-label="Закрыть окно об игре">×</button>
+        <h2 id="about-modal-title">Об игре</h2>
+        <p>
+          Аркадная высокотехнологичная игра "Ползунки" содана 15 февраля 2026 года за 48 часов специально
+          для хакатона «Хакатон «VMK Labs». Авторы: Студенты первого курса института физики:
+          Гром Арина, Чуклина Наталья, Климов Максим, Перун Вячеслав.
+        </p>
+        <img class="about-modal__image" src="assets/Xak/Xakathon.png" alt="Команда хакатона Ползунки">
+      </section>
+    </div>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
   <script src="assets/vendor/colyseus.js"></script>
-  <script type="module" src="script.js?v=20260216_rules_ui_1"></script>
+  <script type="module" src="script.js?v=20260216_mobile_joy_1"></script>
 </body>
 </html>

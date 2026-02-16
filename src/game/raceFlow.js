@@ -216,10 +216,13 @@ export function createRaceFlowApi({
     const right = state.keyMap.has("ArrowRight") || state.keyMap.has("KeyD");
     const up = state.keyMap.has("ArrowUp") || state.keyMap.has("KeyW");
     const down = state.keyMap.has("ArrowDown") || state.keyMap.has("KeyS");
+    const virtualTurn = clamp(Number(state.virtualInput?.turn) || 0, -1, 1);
+    const virtualThrottle = clamp(Number(state.virtualInput?.throttle) || 0, 0, 1);
+    const virtualBrake = clamp(Number(state.virtualInput?.brake) || 0, 0, 1);
     return {
-      turn: (left ? -1 : 0) + (right ? 1 : 0),
-      throttle: up ? 1 : 0,
-      brake: down ? 1 : 0,
+      turn: clamp((left ? -1 : 0) + (right ? 1 : 0) + virtualTurn, -1, 1),
+      throttle: Math.max(up ? 1 : 0, virtualThrottle),
+      brake: Math.max(down ? 1 : 0, virtualBrake),
       spit: state.keyMap.has("Space"),
     };
   }

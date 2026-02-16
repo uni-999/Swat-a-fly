@@ -28,6 +28,9 @@ export function createUiFlowApi({
   const RULES_GOAL_TEXT = "ЦЕЛЬ: ПРОЙТИ 3 КРУГА НА МАКСИМАЛЬНОЙ СКОРОСТИ";
   const ONLINE_COUNTDOWN_MAX_SECONDS = 3;
   const COUNTDOWN_BURST_CLASS = "countdown-burst";
+  const TOUCH_JOYSTICK_RADIUS_PX = 46;
+  const TOUCH_TURN_DEADZONE = 0.12;
+  const TOUCH_THROTTLE_DEADZONE = 0.08;
   let onlineInputPumpId = null;
   let lastOnlineInputSignature = "";
   let lastOnlineInputSentAtMs = 0;
@@ -36,7 +39,9 @@ export function createUiFlowApi({
   let onlineLastMaxProgress = 0;
   let onlineProgressWatchKey = "";
   let onlineOverlayLastCountdownSecond = null;
+  let touchJoystickPointerId = null;
   let rulesModalOpen = false;
+  let aboutModalOpen = false;
   let leaderboardLoading = false;
 
   function normalizePlayerName(rawName) {
@@ -95,6 +100,10 @@ export function createUiFlowApi({
     ui.playerNameInput.addEventListener("blur", () => applyPlayerNameFromInput());
   }
 
+  function syncModalBodyLock() {
+    document.body.classList.toggle("modal-open", rulesModalOpen || aboutModalOpen);
+  }
+
   function clearRaceOverlay() {
     if (!ui.overlay) {
       return;
@@ -108,9 +117,10 @@ export function createUiFlowApi({
     if (!ui.rulesModal) {
       return;
     }
+    closeAboutModal();
     ui.rulesModal.hidden = false;
-    document.body.classList.add("modal-open");
     rulesModalOpen = true;
+    syncModalBodyLock();
   }
 
   function closeRulesModal() {
@@ -118,8 +128,27 @@ export function createUiFlowApi({
       return;
     }
     ui.rulesModal.hidden = true;
-    document.body.classList.remove("modal-open");
     rulesModalOpen = false;
+    syncModalBodyLock();
+  }
+
+  function openAboutModal() {
+    if (!ui.aboutModal) {
+      return;
+    }
+    closeRulesModal();
+    ui.aboutModal.hidden = false;
+    aboutModalOpen = true;
+    syncModalBodyLock();
+  }
+
+  function closeAboutModal() {
+    if (!ui.aboutModal) {
+      return;
+    }
+    ui.aboutModal.hidden = true;
+    aboutModalOpen = false;
+    syncModalBodyLock();
   }
 
   function initRulesModalUi() {
@@ -136,6 +165,165 @@ export function createUiFlowApi({
         }
       });
     }
+  }
+
+  function initAboutModalUi() {
+    if (ui.aboutButton) {
+      ui.aboutButton.addEventListener("click", () => openAboutModal());
+    }
+    if (ui.aboutClose) {
+      ui.aboutClose.addEventListener("click", () => closeAboutModal());
+    }
+    if (ui.aboutModal) {
+      ui.aboutModal.addEventListener("click", (event) => {
+        if (event.target?.hasAttribute?.("data-about-close")) {
+          closeAboutModal();
+        }
+      });
+    }
+  }
+
+  function clampUnit(value) {
+    return Math.max(-1, Math.min(1, Number(value) || 0));
+  }
+
+  function clamp01(value) {
+    return Math.max(0, Math.min(1, Number(value) || 0));
+  }
+
+  function isTouchDevice() {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    const hasCoarsePointer = Boolean(window.matchMedia?.("(pointer: coarse)")?.matches);
+    const touchPoints = typeof navigator !== "undefined" ? Number(navigator.maxTouchPoints || 0) : 0;
+    return hasCoarsePointer || touchPoints > 0;
+  }
+
+  function resetVirtualInputState() {
+    if (!state.virtualInput) {
+      state.virtualInput = { turn: 0, throttle: 0, brake: 0, active: false };
+      return;
+    }
+    state.virtualInput.turn = 0;
+    state.virtualInput.throttle = 0;
+    state.virtualInput.brake = 0;
+    state.virtualInput.active = false;
+  }
+
+  function setTouchJoystickVisual(dx, dy) {
+    if (!ui.touchJoystick) {
+      return;
+    }
+    ui.touchJoystick.style.setProperty("--joy-x", `${Number(dx || 0).toFixed(2)}px`);
+    ui.touchJoystick.style.setProperty("--joy-y", `${Number(dy || 0).toFixed(2)}px`);
+  }
+
+  function releaseTouchJoystickPointer() {
+    if (!ui.touchJoystick || touchJoystickPointerId === null) {
+      touchJoystickPointerId = null;
+      return;
+    }
+    try {
+      ui.touchJoystick.releasePointerCapture(touchJoystickPointerId);
+    } catch (error) {
+      // Ignore capture release errors from stale pointers.
+    }
+    touchJoystickPointerId = null;
+  }
+
+  function clearTouchJoystickControl() {
+    resetVirtualInputState();
+    setTouchJoystickVisual(0, 0);
+    releaseTouchJoystickPointer();
+    pushOnlineInput(true);
+  }
+
+  function syncTouchControlsVisibility() {
+    if (!ui.touchControls) {
+      return;
+    }
+    const visible = Boolean(isTouchDevice() && state.currentScreen === "race");
+    ui.touchControls.hidden = !visible;
+    if (!visible) {
+      clearTouchJoystickControl();
+    }
+  }
+
+  function applyTouchJoystickFromPointer(event) {
+    if (!ui.touchJoystick || touchJoystickPointerId !== event.pointerId) {
+      return;
+    }
+
+    const rect = ui.touchJoystick.getBoundingClientRect();
+    const cx = rect.left + rect.width * 0.5;
+    const cy = rect.top + rect.height * 0.5;
+    let dx = Number(event.clientX) - cx;
+    let dy = Number(event.clientY) - cy;
+    const distance = Math.hypot(dx, dy);
+    if (distance > TOUCH_JOYSTICK_RADIUS_PX && distance > 0.001) {
+      const ratio = TOUCH_JOYSTICK_RADIUS_PX / distance;
+      dx *= ratio;
+      dy *= ratio;
+    }
+
+    setTouchJoystickVisual(dx, dy);
+
+    const turnRaw = clampUnit(dx / TOUCH_JOYSTICK_RADIUS_PX);
+    const upRaw = clamp01((-dy) / TOUCH_JOYSTICK_RADIUS_PX);
+    const downRaw = clamp01(dy / TOUCH_JOYSTICK_RADIUS_PX);
+    const turn = Math.abs(turnRaw) >= TOUCH_TURN_DEADZONE ? turnRaw : 0;
+    const throttle = upRaw >= TOUCH_THROTTLE_DEADZONE ? upRaw : 0;
+    const brake = downRaw >= TOUCH_THROTTLE_DEADZONE ? downRaw : 0;
+
+    state.virtualInput.turn = turn;
+    state.virtualInput.throttle = throttle;
+    state.virtualInput.brake = brake;
+    state.virtualInput.active = Math.abs(turn) > 0 || throttle > 0 || brake > 0;
+    pushOnlineInput(true);
+  }
+
+  function initTouchControlsUi() {
+    if (!ui.touchJoystick || !ui.touchControls) {
+      return;
+    }
+    if (ui.touchJoystick.dataset.bound === "1") {
+      syncTouchControlsVisibility();
+      return;
+    }
+    ui.touchJoystick.dataset.bound = "1";
+
+    ui.touchJoystick.addEventListener("pointerdown", (event) => {
+      if (!isTouchDevice() || touchJoystickPointerId !== null) {
+        return;
+      }
+      touchJoystickPointerId = event.pointerId;
+      ui.touchJoystick.setPointerCapture(event.pointerId);
+      applyTouchJoystickFromPointer(event);
+      event.preventDefault();
+    });
+
+    ui.touchJoystick.addEventListener("pointermove", (event) => {
+      if (touchJoystickPointerId !== event.pointerId) {
+        return;
+      }
+      applyTouchJoystickFromPointer(event);
+      event.preventDefault();
+    });
+
+    const clearPointer = (event) => {
+      if (touchJoystickPointerId !== event.pointerId) {
+        return;
+      }
+      clearTouchJoystickControl();
+      event.preventDefault();
+    };
+
+    ui.touchJoystick.addEventListener("pointerup", clearPointer);
+    ui.touchJoystick.addEventListener("pointercancel", clearPointer);
+    ui.touchJoystick.addEventListener("lostpointercapture", clearPointer);
+
+    syncTouchControlsVisibility();
   }
 
   function normalizeOnlineRoomId(rawRoomId) {
@@ -693,6 +881,8 @@ export function createUiFlowApi({
   function wireUi() {
     initPlayerNameUi();
     initRulesModalUi();
+    initAboutModalUi();
+    initTouchControlsUi();
     initOnlineRoomUi();
     renderLeaderboardTrackOptions();
     renderLeaderboardRows([]);
@@ -724,10 +914,6 @@ export function createUiFlowApi({
       showScreen("leaderboard");
       void refreshLeaderboard();
     });
-
-    document.getElementById("btn-settings").addEventListener("click", () =>
-      showToast("Настройки будут доработаны после стабилизации online-flow.")
-    );
 
     if (ui.modeClassic) {
       ui.modeClassic.addEventListener("click", () => setOfflineMode(OFFLINE_MODES.CLASSIC));
@@ -798,6 +984,7 @@ export function createUiFlowApi({
       if (state.phaserGame) {
         state.phaserGame.scale.refresh();
       }
+      syncTouchControlsVisibility();
     });
 
     if (!onlineInputPumpId) {
@@ -814,6 +1001,11 @@ export function createUiFlowApi({
     if (isEscape && rulesModalOpen) {
       event.preventDefault();
       closeRulesModal();
+      return;
+    }
+    if (isEscape && aboutModalOpen) {
+      event.preventDefault();
+      closeAboutModal();
       return;
     }
 
@@ -867,8 +1059,15 @@ export function createUiFlowApi({
     if (name !== "main" && rulesModalOpen) {
       closeRulesModal();
     }
+    if (name !== "main" && aboutModalOpen) {
+      closeAboutModal();
+    }
+    if (name !== "race") {
+      clearTouchJoystickControl();
+    }
 
     syncOnlineRoomPickerVisibility();
+    syncTouchControlsVisibility();
     if (name === "track" && state.playMode === "online") {
       if (state.onlineRoomOptionsTrackId !== state.selectedTrackId) {
         void refreshOnlineRooms({ silent: true });
@@ -972,10 +1171,13 @@ export function createUiFlowApi({
     const right = state.keyMap.has("ArrowRight") || state.keyMap.has("KeyD");
     const up = state.keyMap.has("ArrowUp") || state.keyMap.has("KeyW");
     const down = state.keyMap.has("ArrowDown") || state.keyMap.has("KeyS");
+    const virtualTurn = clampUnit(state.virtualInput?.turn || 0);
+    const virtualThrottle = clamp01(state.virtualInput?.throttle || 0);
+    const virtualBrake = clamp01(state.virtualInput?.brake || 0);
     return {
-      turn: (left ? -1 : 0) + (right ? 1 : 0),
-      throttle: up ? 1 : 0,
-      brake: down ? 1 : 0,
+      turn: clampUnit((left ? -1 : 0) + (right ? 1 : 0) + virtualTurn),
+      throttle: Math.max(up ? 1 : 0, virtualThrottle),
+      brake: Math.max(down ? 1 : 0, virtualBrake),
     };
   }
 
@@ -1022,6 +1224,8 @@ export function createUiFlowApi({
     state.selectedTrackId = trackDef.id;
     state.lastFinishedTrackId = null;
     state.keyMap.clear();
+    resetVirtualInputState();
+    setTouchJoystickVisual(0, 0);
     resetOnlineFinishWatchers();
 
     if (state.playMode === "online") {
