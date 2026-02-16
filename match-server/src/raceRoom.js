@@ -629,7 +629,7 @@ export class RaceRoom extends Room {
 
   applyBodyItemEffect(player, item, nowMs) {
     if (item.type === "APPLE") {
-      player.bodySegments = Math.min(MAX_BODY_SEGMENTS, safeNumber(player.bodySegments, START_BODY_SEGMENTS) + 1);
+      player.bodySegments = Math.min(MAX_BODY_SEGMENTS, safeNumber(player.bodySegments, START_BODY_SEGMENTS) + 2);
       this.addEffect(player, "APPLE_BOOST", APPLE_BOOST_DURATION_MS, nowMs);
       player.speed = Math.max(player.speed, MAX_SPEED_BASE * APPLE_BOOST_INSTANT_SPEED_FACTOR);
       return;

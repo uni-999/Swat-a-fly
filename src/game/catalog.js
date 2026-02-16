@@ -2,7 +2,7 @@ import { TAU } from "./config.js";
 
 // Gameplay catalogs and definitions
 export const BODY_ITEMS = {
-  APPLE: { color: "#ff5f6a", deltaSegments: 1 },
+  APPLE: { color: "#ff5f6a", deltaSegments: 2 },
   CACTUS: { color: "#4fd17b", deltaSegments: -1 },
 };
 export const SNAKE_SPRITES_BASE_PATH = "/assets/sprites/snakes";
