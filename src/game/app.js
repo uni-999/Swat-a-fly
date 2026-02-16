@@ -15,7 +15,7 @@ import { createRaceFlowApi } from "./raceFlow.js?v=20260216_i18n_2";
 import { createRaceState, randomizePickupPosition, randomizeBodyItemPosition } from "./raceSetup.js";
 import { createHudApi } from "./hud.js?v=20260216_i18n_2";
 import { createSceneApi } from "./scene.js?v=20260216_leaderboard_2";
-import { createUiFlowApi } from "./uiFlow.js?v=20260216_i18n_2";
+import { createUiFlowApi } from "./uiFlow.js?v=20260216_i18n_3";
 import { createCoreUiApi } from "./coreUi.js?v=20260216_i18n_2";
 import { createOnlineRoomClientApi } from "./onlineRoomClient.js";
 import {

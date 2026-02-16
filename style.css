@@ -153,7 +153,16 @@ body {
 body.race-screen-active .app-header {
   margin-bottom: clamp(-24px, -2.2vw, -10px);
   z-index: 40;
+  pointer-events: auto;
+}
+
+body.race-screen-active .app-header h1,
+body.race-screen-active .app-header p {
   pointer-events: none;
+}
+
+body.race-screen-active .app-header .btn-language {
+  pointer-events: auto;
 }
 
 body.race-screen-active .app {

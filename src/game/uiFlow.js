@@ -149,14 +149,26 @@ export function createUiFlowApi({
     }
   }
 
+  function resolveLanguageButton() {
+    if (ui.languageButton && document.body?.contains(ui.languageButton)) {
+      return ui.languageButton;
+    }
+    const fallback = document.getElementById("btn-language");
+    if (fallback) {
+      ui.languageButton = fallback;
+    }
+    return ui.languageButton || null;
+  }
+
   function applyStaticLocalizedTexts() {
     document.title = tr("meta.title");
     document.documentElement.lang = String(state.language || "ru");
 
     const nextLangLabel = readLanguageToggleLabel();
-    if (ui.languageButton) {
-      ui.languageButton.textContent = nextLangLabel;
-      ui.languageButton.setAttribute("aria-label", tr("lang.toggleAria", { lang: nextLangLabel }));
+    const languageButton = resolveLanguageButton();
+    if (languageButton) {
+      languageButton.textContent = nextLangLabel;
+      languageButton.setAttribute("aria-label", tr("lang.toggleAria", { lang: nextLangLabel }));
     }
 
     setText(".app-header p", "header.subtitle");
@@ -261,10 +273,15 @@ export function createUiFlowApi({
 
   function initLanguageUi() {
     applyStaticLocalizedTexts();
-    if (!ui.languageButton) {
+    const languageButton = resolveLanguageButton();
+    if (!languageButton) {
       return;
     }
-    bindPress(ui.languageButton, () => {
+    if (languageButton.dataset.langBound === "1") {
+      return;
+    }
+    languageButton.dataset.langBound = "1";
+    bindPress(languageButton, () => {
       switchLanguage();
       applyStaticLocalizedTexts();
       renderSnakeCards();
