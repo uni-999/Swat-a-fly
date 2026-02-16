@@ -1177,19 +1177,19 @@ body.modal-open {
 
   .hud-cluster {
     gap: 6px;
-    width: min(190px, 30vw);
+    width: min(176px, 27vw);
   }
 
   .hud-cluster--tl {
-    width: min(150px, 25vw);
+    width: min(140px, 22vw);
   }
 
   .hud-cluster--bl {
-    width: min(150px, 25vw);
+    width: min(140px, 22vw);
   }
 
   .hud-cluster--br {
-    width: min(188px, 30vw);
+    width: min(172px, 27vw);
   }
 
   .hud-box {
@@ -1227,7 +1227,7 @@ body.modal-open {
 
   .touch-controls {
     width: 156px;
-    right: -18px;
+    right: -30px;
     bottom: 4px;
   }
 
@@ -1260,18 +1260,18 @@ body.modal-open {
   }
 
   .hud-cluster {
-    width: min(158px, 38vw);
+    width: min(150px, 34vw);
     gap: 4px;
   }
 
   .hud-cluster--tl {
-    width: min(132px, 34vw);
+    width: min(124px, 30vw);
   }
 
   .hud-cluster--br {
     left: auto;
     right: 0;
-    width: min(164px, 40vw);
+    width: min(154px, 36vw);
   }
 
   .standings ol {
@@ -1331,16 +1331,16 @@ body.modal-open {
 
   body.race-screen-active .hud-cluster--tl,
   body.race-screen-active .hud-cluster--bl {
-    left: clamp(-150px, -16vw, -92px);
+    left: clamp(-210px, -22vw, -130px);
   }
 
   body.race-screen-active .hud-cluster--tr,
   body.race-screen-active .hud-cluster--br {
-    right: clamp(-150px, -16vw, -92px);
+    right: clamp(-210px, -22vw, -130px);
   }
 
   body.race-screen-active .touch-controls {
-    right: clamp(-92px, -10vw, -38px);
+    right: clamp(-140px, -15vw, -70px);
     bottom: 8px;
   }
 }
