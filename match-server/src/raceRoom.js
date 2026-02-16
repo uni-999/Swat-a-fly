@@ -42,10 +42,8 @@ const MAX_BODY_SEGMENTS = 56;
 const APPLE_BOOST_DURATION_MS = 680;
 const APPLE_BOOST_INSTANT_SPEED_FACTOR = 0.44;
 
-const PICKUP_LANE_RATIOS = [-0.04, 0.04, 0];
-const ONLINE_PICKUP_LANE_RATIOS = [-0.04, 0.04, 0];
+const ONLINE_MAX_OBJECT_LANE_RATIO = 0.88;
 const ONLINE_BODY_ITEM_COUNT = 12;
-const ONLINE_BODY_LANE_RATIOS = [-0.07, -0.03, 0, 0.03, 0.07];
 const ONLINE_BODY_ITEM_MIN_SEPARATION = 64;
 const ONLINE_BODY_ITEM_TO_CHECKPOINT_MIN_DIST = 62;
 const ONLINE_BODY_ITEM_TO_PICKUP_MIN_DIST = 40;
@@ -119,6 +117,28 @@ function createSeededRng(seed) {
   };
 }
 
+function randomLaneRatioFromRng(rng) {
+  const unit = clamp(safeNumber(rng?.(), 0), 0, 1);
+  return (unit * 2 - 1) * ONLINE_MAX_OBJECT_LANE_RATIO;
+}
+
+function buildBalancedBodyItemTypes(count, rng) {
+  const total = Math.max(0, Math.floor(safeNumber(count, 0)));
+  const appleCount = Math.ceil(total * 0.5);
+  const cactusCount = Math.max(0, total - appleCount);
+  const types = [
+    ...new Array(appleCount).fill("APPLE"),
+    ...new Array(cactusCount).fill("CACTUS"),
+  ];
+  for (let i = types.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(clamp(safeNumber(rng?.(), 0), 0, 0.999999) * (i + 1));
+    const tmp = types[i];
+    types[i] = types[j];
+    types[j] = tmp;
+  }
+  return types;
+}
+
 function resolveTrackDef(trackId) {
   return TRACK_DEF_BY_ID.get(normalizeTrackId(trackId)) || TRACK_DEFS[0] || null;
 }
@@ -136,12 +156,13 @@ function getSpawnPose(trackId, slotIndex = 0) {
   };
 }
 
-function createTrackPickups(track) {
+function createTrackPickups(track, trackId = "") {
+  const rng = createSeededRng(hashString(`online_pickups_${trackId || "track"}`));
   const fractions = Array.isArray(track?.pickupFractions) ? track.pickupFractions : [];
   return fractions.map((fraction, index) => {
     const sample = sampleTrack(track, fraction);
     const normal = { x: -sample.tangent.y, y: sample.tangent.x };
-    const laneRatio = ONLINE_PICKUP_LANE_RATIOS[index % ONLINE_PICKUP_LANE_RATIOS.length];
+    const laneRatio = randomLaneRatioFromRng(rng);
     const lateral = track.roadWidth * laneRatio;
     return {
       id: `pickup_${index + 1}`,
@@ -179,6 +200,7 @@ function createTrackBodyItems(track, trackId, pickups = []) {
   const items = [];
   const rng = createSeededRng(hashString(`online_body_${trackId || "track"}`));
   const baseOffset = rng();
+  const bodyItemTypes = buildBalancedBodyItemTypes(ONLINE_BODY_ITEM_COUNT, rng);
 
   for (let i = 0; i < ONLINE_BODY_ITEM_COUNT; i += 1) {
     let chosen = null;
@@ -186,8 +208,7 @@ function createTrackBodyItems(track, trackId, pickups = []) {
       const fraction = mod1(baseOffset + i / ONLINE_BODY_ITEM_COUNT + (rng() - 0.5) * 0.08);
       const sample = sampleTrack(track, fraction);
       const normal = { x: -sample.tangent.y, y: sample.tangent.x };
-      const laneBase = ONLINE_BODY_LANE_RATIOS[(i + attempt) % ONLINE_BODY_LANE_RATIOS.length];
-      const laneRatio = clamp(laneBase + (rng() - 0.5) * 0.025, -0.12, 0.12);
+      const laneRatio = randomLaneRatioFromRng(rng);
       const lateral = track.roadWidth * laneRatio;
       const x = sample.x + normal.x * lateral;
       const y = sample.y + normal.y * lateral;
@@ -204,7 +225,7 @@ function createTrackBodyItems(track, trackId, pickups = []) {
 
     items.push({
       id: `body_item_${i + 1}`,
-      type: rng() < 0.58 ? "APPLE" : "CACTUS",
+      type: bodyItemTypes[i] || "APPLE",
       x: chosen.x,
       y: chosen.y,
       radius: 11,
@@ -231,7 +252,7 @@ export class RaceRoom extends Room {
     this.lapLengthMeters = Math.max(DEFAULT_MIN_LAP_LENGTH, rawLapLength);
     this.trackLengthMeters = this.lapLengthMeters * this.lapsToFinish;
 
-    this.pickups = this.trackRuntime ? createTrackPickups(this.trackRuntime) : [];
+    this.pickups = this.trackRuntime ? createTrackPickups(this.trackRuntime, this.trackId) : [];
     this.bodyItems = this.trackRuntime ? createTrackBodyItems(this.trackRuntime, this.trackId, this.pickups) : [];
 
     this.players = new Map();

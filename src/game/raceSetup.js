@@ -13,12 +13,10 @@ import { SNAKES, PICKUP_ORDER, NPC_PROFILES } from "./catalog.js";
 import { clamp, sqrDistance, mod1 } from "./utils.js";
 import { buildTrackRuntime, sampleTrack, projectOnTrack } from "./trackMath.js";
 
-const PICKUP_LANE_RATIOS = [-0.04, 0.04, 0];
-const BODY_ITEM_LANE_RATIOS = [-0.07, -0.03, 0, 0.03, 0.07];
 const BODY_ITEM_FRACTION_JITTER = 0.06;
-const BODY_ITEM_LANE_JITTER = 0.03;
 const BODY_ITEM_ROUTE_ATTEMPTS = 48;
-const MAX_OBJECT_LANE_RATIO = 0.1;
+const MAX_OBJECT_LANE_RATIO = 0.88;
+const BODY_ITEM_VALID_ROAD_RATIO = 0.92;
 
 export function createRaceState(trackDef, selectedSnake, debugMode, startMs = performance.now()) {
   const track = buildTrackRuntime(trackDef);
@@ -136,10 +134,32 @@ export function normalizeNameToken(value) {
     .replace(/^_+|_+$/g, "");
 }
 
+function randomLaneRatio(randomFn = Math.random) {
+  const unit = clamp(Number(randomFn?.()) || 0, 0, 1);
+  return (unit * 2 - 1) * MAX_OBJECT_LANE_RATIO;
+}
+
+function buildBalancedBodyItemTypes(count, randomFn = Math.random) {
+  const total = Math.max(0, Math.floor(Number(count) || 0));
+  const appleCount = Math.ceil(total * 0.5);
+  const cactusCount = Math.max(0, total - appleCount);
+  const types = [
+    ...new Array(appleCount).fill("APPLE"),
+    ...new Array(cactusCount).fill("CACTUS"),
+  ];
+  for (let i = types.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(clamp(Number(randomFn?.()) || 0, 0, 0.999999) * (i + 1));
+    const tmp = types[i];
+    types[i] = types[j];
+    types[j] = tmp;
+  }
+  return types;
+}
+
 export function createPickups(track) {
   return track.pickupFractions.map((fraction, index) => {
-    const baseLane = PICKUP_LANE_RATIOS[index % PICKUP_LANE_RATIOS.length];
-    const placement = placeTrackObject(track, fraction, baseLane);
+    const laneRatio = randomLaneRatio();
+    const placement = placeTrackObject(track, fraction, laneRatio);
     return {
       id: `pickup_${index + 1}`,
       type: PICKUP_ORDER[index % PICKUP_ORDER.length],
@@ -157,12 +177,13 @@ export function createPickups(track) {
 export function createBodyItems(track, pickups) {
   const items = [];
   const baseOffset = Math.random();
+  const itemTypes = buildBalancedBodyItemTypes(BODY_ITEM_COUNT);
   for (let i = 0; i < BODY_ITEM_COUNT; i += 1) {
     const routeFraction = mod1(baseOffset + i / BODY_ITEM_COUNT + (Math.random() - 0.5) * 0.04);
-    const laneRatio = BODY_ITEM_LANE_RATIOS[i % BODY_ITEM_LANE_RATIOS.length];
+    const laneRatio = randomLaneRatio();
     const item = {
       id: `body_item_${i + 1}`,
-      type: Math.random() < 0.58 ? "APPLE" : "CACTUS",
+      type: itemTypes[i] || "APPLE",
       x: 0,
       y: 0,
       radius: 11,
@@ -181,16 +202,12 @@ export function randomizeBodyItemPosition(item, track, occupiedItems = [], picku
   const baseFraction = Number.isFinite(item.routeFraction) ? item.routeFraction : Math.random();
   const baseLaneRatio = Number.isFinite(item.laneRatio)
     ? item.laneRatio
-    : BODY_ITEM_LANE_RATIOS[Math.floor(Math.random() * BODY_ITEM_LANE_RATIOS.length)];
+    : randomLaneRatio();
   let chosen = null;
 
   for (let attempt = 0; attempt < BODY_ITEM_ROUTE_ATTEMPTS; attempt += 1) {
     const attemptFraction = mod1(baseFraction + (Math.random() - 0.5) * BODY_ITEM_FRACTION_JITTER);
-    const attemptLaneRatio = clamp(
-      baseLaneRatio + (Math.random() - 0.5) * BODY_ITEM_LANE_JITTER,
-      -MAX_OBJECT_LANE_RATIO,
-      MAX_OBJECT_LANE_RATIO,
-    );
+    const attemptLaneRatio = randomLaneRatio();
     const placement = placeTrackObject(track, attemptFraction, attemptLaneRatio);
     if (isBodyItemPositionValid(item, placement.x, placement.y, track, occupiedItems, pickups)) {
       chosen = placement;
@@ -206,15 +223,11 @@ export function randomizeBodyItemPosition(item, track, occupiedItems = [], picku
   item.y = chosen.y;
   item.routeFraction = chosen.fraction;
   item.laneRatio = chosen.laneRatio;
-
-  if (Math.random() < 0.35) {
-    item.type = item.type === "APPLE" ? "CACTUS" : "APPLE";
-  }
 }
 
 export function isBodyItemPositionValid(item, x, y, track, occupiedItems, pickups) {
   const projection = projectOnTrack(track, x, y);
-  if (!projection || projection.distance > track.roadWidth * 0.32) {
+  if (!projection || projection.distance > track.roadWidth * BODY_ITEM_VALID_ROAD_RATIO) {
     return false;
   }
   for (let i = 0; i < track.checkpoints.length; i += 1) {
