@@ -4,8 +4,10 @@ import { TRACK_DEFS, PICKUP_ORDER } from "../shared-game/catalog.js";
 import { buildTrackRuntime, sampleTrack, projectOnTrack } from "../shared-game/trackMath.js";
 
 const DEFAULT_TRACK_LENGTH = 12000;
+const DEFAULT_MIN_LAP_LENGTH = 800;
+const RULES_MS = 2000;
 const COUNTDOWN_MS = 3000;
-const LAPS_TO_FINISH = 0;
+const LAPS_TO_FINISH = 3;
 const NO_PROGRESS_FINISH_WINDOW_MS = 14000;
 const NO_PROGRESS_EPS_METERS = 12;
 
@@ -224,11 +226,10 @@ export class RaceRoom extends Room {
 
     this.trackDef = resolveTrackDef(this.trackId);
     this.trackRuntime = this.trackDef ? buildTrackRuntime(this.trackDef) : null;
-    this.lapsToFinish = Math.max(0, Math.floor(safeNumber(options?.lapsToFinish, LAPS_TO_FINISH)));
-    this.trackLengthMeters =
-      this.lapsToFinish > 0
-        ? Math.max(DEFAULT_TRACK_LENGTH, (this.trackRuntime?.totalLength || DEFAULT_TRACK_LENGTH) * this.lapsToFinish)
-        : Number.POSITIVE_INFINITY;
+    this.lapsToFinish = Math.max(1, Math.floor(safeNumber(options?.lapsToFinish, LAPS_TO_FINISH)));
+    const rawLapLength = safeNumber(this.trackRuntime?.totalLength, DEFAULT_TRACK_LENGTH);
+    this.lapLengthMeters = Math.max(DEFAULT_MIN_LAP_LENGTH, rawLapLength);
+    this.trackLengthMeters = this.lapLengthMeters * this.lapsToFinish;
 
     this.pickups = this.trackRuntime ? createTrackPickups(this.trackRuntime) : [];
     this.bodyItems = this.trackRuntime ? createTrackBodyItems(this.trackRuntime, this.trackId, this.pickups) : [];
@@ -240,6 +241,7 @@ export class RaceRoom extends Room {
     this.lastTickAtMs = Date.now();
     this.lastProgressMaxMeters = 0;
     this.lastProgressAdvanceAtMs = this.lastTickAtMs;
+    this.rulesEndsAtMs = 0;
     this.countdownEndsAtMs = 0;
     this.raceStartedAtMs = 0;
     this.raceEndedAtMs = 0;
@@ -248,7 +250,12 @@ export class RaceRoom extends Room {
     this.debugLogEveryTicks = Math.max(1, Math.floor(safeNumber(process.env.RACE_DEBUG_EVERY_TICKS, 120)));
 
     this.setPrivate(false);
-    this.setMetadata({ trackId: this.trackId, phase: this.phase, tickRate: this.tickRate });
+    this.setMetadata({
+      trackId: this.trackId,
+      phase: this.phase,
+      tickRate: this.tickRate,
+      lapsToFinish: this.lapsToFinish,
+    });
 
     this.onMessage("input", (client, payload) => this.handleInput(client, payload));
     this.onMessage("ready", (client, payload) => this.handleReady(client, payload));
@@ -262,6 +269,8 @@ export class RaceRoom extends Room {
       tickRate: this.tickRate,
       raceMaxMs: this.raceMaxMs,
       lapsToFinish: this.lapsToFinish,
+      lapLengthMeters: Math.round(this.lapLengthMeters),
+      trackLengthMeters: Math.round(this.trackLengthMeters),
       debugEveryTicks: this.debugLogEveryTicks,
     });
   }
@@ -286,6 +295,7 @@ export class RaceRoom extends Room {
       steer: 0,
       speed: 0,
       progress: 0,
+      lapsCompleted: 0,
       bodySegments: START_BODY_SEGMENTS,
       shieldCharges: 0,
       effects: [],
@@ -374,11 +384,13 @@ export class RaceRoom extends Room {
       return;
     }
 
-    this.phase = "countdown";
-    this.countdownEndsAtMs = Date.now() + COUNTDOWN_MS;
-    this.setMetadata({ ...this.metadata, phase: this.phase });
-    this.logDebug("phase_countdown_started", {
-      countdownMs: COUNTDOWN_MS,
+    const nowMs = Date.now();
+    this.phase = "rules";
+    this.rulesEndsAtMs = nowMs + RULES_MS;
+    this.countdownEndsAtMs = 0;
+    this.setMetadata({ ...this.metadata, phase: this.phase, lapsToFinish: this.lapsToFinish });
+    this.logDebug("phase_rules_started", {
+      rulesMs: RULES_MS,
       connectedPlayers: participants.length,
     });
   }
@@ -389,12 +401,23 @@ export class RaceRoom extends Room {
     this.lastTickAtMs = nowMs;
     this.tickIndex += 1;
 
+    if (this.phase === "rules" && nowMs >= this.rulesEndsAtMs) {
+      this.phase = "countdown";
+      this.countdownEndsAtMs = nowMs + COUNTDOWN_MS;
+      this.setMetadata({ ...this.metadata, phase: this.phase, lapsToFinish: this.lapsToFinish });
+      this.logDebug("phase_countdown_started", {
+        countdownMs: COUNTDOWN_MS,
+        tick: this.tickIndex,
+        players: this.players.size,
+      });
+    }
+
     if (this.phase === "countdown" && nowMs >= this.countdownEndsAtMs) {
       this.phase = "running";
       this.raceStartedAtMs = nowMs;
       this.lastProgressAdvanceAtMs = nowMs;
       this.lastProgressMaxMeters = 0;
-      this.setMetadata({ ...this.metadata, phase: this.phase });
+      this.setMetadata({ ...this.metadata, phase: this.phase, lapsToFinish: this.lapsToFinish });
       this.logDebug("phase_running_started", {
         tick: this.tickIndex,
         players: this.players.size,
@@ -411,7 +434,7 @@ export class RaceRoom extends Room {
       }
     }
 
-    this.broadcastState();
+    this.broadcastState(nowMs);
   }
 
   expireEffects(player, nowMs) {
@@ -629,8 +652,12 @@ export class RaceRoom extends Room {
       this.collectTrackObjects(player, nowMs);
 
       player.progress += player.speed * dt;
-      if (this.lapsToFinish > 0 && player.progress >= this.trackLengthMeters) {
+      if (this.lapLengthMeters > 0) {
+        player.lapsCompleted = Math.min(this.lapsToFinish, Math.floor(player.progress / this.lapLengthMeters));
+      }
+      if (player.progress >= this.trackLengthMeters) {
         player.finished = true;
+        player.lapsCompleted = this.lapsToFinish;
         player.finishTimeMs = Math.max(0, nowMs - this.raceStartedAtMs);
       }
     }
@@ -644,9 +671,9 @@ export class RaceRoom extends Room {
       this.lastProgressAdvanceAtMs = nowMs;
     }
 
-    const hasLapFinisher =
-      this.lapsToFinish > 0 &&
-      Array.from(this.players.values()).some((p) => p.finished && Number.isFinite(p.finishTimeMs));
+    const hasLapFinisher = Array.from(this.players.values()).some(
+      (p) => p.finished && Number.isFinite(p.finishTimeMs)
+    );
     if (hasLapFinisher) {
       this.forceFinishByProgress(nowMs, "lap_finish");
       return;
@@ -701,6 +728,9 @@ export class RaceRoom extends Room {
     const players = Array.from(this.players.values());
     const bestProgress = players.reduce((acc, p) => Math.max(acc, safeNumber(p.progress, 0)), 0);
     for (const player of players) {
+      if (this.lapLengthMeters > 0) {
+        player.lapsCompleted = Math.min(this.lapsToFinish, Math.floor(safeNumber(player.progress, 0) / this.lapLengthMeters));
+      }
       if (!player.finished) {
         player.finished = true;
       }
@@ -720,7 +750,12 @@ export class RaceRoom extends Room {
     this.phase = "finished";
     this.finishReason = reason;
     this.raceEndedAtMs = nowMs;
-    this.setMetadata({ ...this.metadata, phase: this.phase, finishReason: this.finishReason });
+    this.setMetadata({
+      ...this.metadata,
+      phase: this.phase,
+      finishReason: this.finishReason,
+      lapsToFinish: this.lapsToFinish,
+    });
     this.logDebug("phase_finished", {
       reason: this.finishReason,
       elapsedMs: Math.max(0, nowMs - this.raceStartedAtMs),
@@ -783,7 +818,9 @@ export class RaceRoom extends Room {
     }
   }
 
-  buildSnapshot() {
+  buildSnapshot(nowMs = Date.now()) {
+    const countdownRemainingMs = this.phase === "countdown" ? Math.max(0, this.countdownEndsAtMs - nowMs) : 0;
+    const rulesRemainingMs = this.phase === "rules" ? Math.max(0, this.rulesEndsAtMs - nowMs) : 0;
     const players = Array.from(this.players.values())
       .map((p) => ({
         sessionId: p.sessionId,
@@ -798,6 +835,7 @@ export class RaceRoom extends Room {
         heading: Number(p.heading.toFixed(4)),
         speed: Number(p.speed.toFixed(2)),
         progress: Number(p.progress.toFixed(2)),
+        lapsCompleted: Math.max(0, Math.floor(safeNumber(p.lapsCompleted, 0))),
         bodySegments: p.bodySegments,
         shieldCharges: p.shieldCharges,
         effects: Array.isArray(p.effects) ? p.effects.map((effect) => ({ type: effect.type, untilMs: effect.untilMs })) : [],
@@ -829,6 +867,14 @@ export class RaceRoom extends Room {
       tick: this.tickIndex,
       phase: this.phase,
       trackId: this.trackId,
+      lapsToFinish: this.lapsToFinish,
+      lapLengthMeters: this.lapLengthMeters,
+      trackLengthMeters: this.trackLengthMeters,
+      serverNowMs: nowMs,
+      rulesEndsAtMs: this.rulesEndsAtMs,
+      rulesRemainingMs,
+      countdownEndsAtMs: this.countdownEndsAtMs,
+      countdownRemainingMs,
       raceStartedAtMs: this.raceStartedAtMs,
       raceEndedAtMs: this.raceEndedAtMs,
       finishReason: this.finishReason,
@@ -838,8 +884,8 @@ export class RaceRoom extends Room {
     };
   }
 
-  broadcastState() {
-    this.broadcast("snapshot", this.buildSnapshot());
+  broadcastState(nowMs = Date.now()) {
+    this.broadcast("snapshot", this.buildSnapshot(nowMs));
   }
 
   summarizePlayersForLog() {

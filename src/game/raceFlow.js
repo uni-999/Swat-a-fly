@@ -1,4 +1,6 @@
 import {
+  RACE_RULES_SPLASH_MS,
+  RACE_RULES_SPLASH_TEXT,
   RACE_COUNTDOWN_TOTAL_MS,
   RACE_COUNTDOWN_SECONDS,
   BODY_CROSSING_START_GRACE_MS,
@@ -43,6 +45,20 @@ export function createRaceFlowApi({
   formatRacerProgressLabel,
 } = {}) {
   function updateRace(race, nowMs, dt) {
+    if (race.phase === "rules") {
+      const remain = Math.max(0, RACE_RULES_SPLASH_MS - (nowMs - race.rulesStartMs));
+      if (remain <= 0) {
+        race.phase = "countdown";
+        race.countdownStartMs = nowMs;
+        race.countdownLastSecond = null;
+      } else {
+        showOverlayMessage(RACE_RULES_SPLASH_TEXT, "overlay-rules", "#ffe4bd");
+      }
+      updateBodySegmentsForRace(race, nowMs);
+      updateHud(race, nowMs);
+      return;
+    }
+
     if (race.phase === "countdown") {
       const remain = Math.max(0, RACE_COUNTDOWN_TOTAL_MS - (nowMs - race.countdownStartMs));
       if (remain <= 0) {
@@ -77,7 +93,7 @@ export function createRaceFlowApi({
     if (race.phase === "finished") {
       updateBodySegmentsForRace(race, nowMs);
       if (nowMs > race.overlayUntilMs) {
-        ui.overlay.classList.remove("visible", "overlay-go", "overlay-finish", "countdown", COUNTDOWN_BURST_ANIM_CLASS);
+        ui.overlay.classList.remove("visible", "overlay-go", "overlay-finish", "overlay-rules", "countdown", COUNTDOWN_BURST_ANIM_CLASS);
         ui.overlay.style.removeProperty("--overlay-color");
         if (!race.resultsPushed) {
           race.resultsPushed = true;
@@ -90,7 +106,7 @@ export function createRaceFlowApi({
     if (nowMs <= race.overlayUntilMs) {
       ui.overlay.classList.add("visible");
     } else {
-      ui.overlay.classList.remove("visible", "overlay-go", "overlay-finish", "countdown", COUNTDOWN_BURST_ANIM_CLASS);
+      ui.overlay.classList.remove("visible", "overlay-go", "overlay-finish", "overlay-rules", "countdown", COUNTDOWN_BURST_ANIM_CLASS);
       ui.overlay.style.removeProperty("--overlay-color");
     }
 

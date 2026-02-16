@@ -25,6 +25,9 @@ export function createUiFlowApi({
   const ONLINE_INPUT_PUSH_INTERVAL_MS = 50;
   const ONLINE_INPUT_KEEPALIVE_MS = 220;
   const LEADERBOARD_LIMIT = 20;
+  const RULES_GOAL_TEXT = "ЦЕЛЬ: ПРОЙТИ 3 КРУГА НА МАКСИМАЛЬНОЙ СКОРОСТИ";
+  const ONLINE_COUNTDOWN_MAX_SECONDS = 3;
+  const COUNTDOWN_BURST_CLASS = "countdown-burst";
   let onlineInputPumpId = null;
   let lastOnlineInputSignature = "";
   let lastOnlineInputSentAtMs = 0;
@@ -32,6 +35,8 @@ export function createUiFlowApi({
   let onlineNoProgressSinceMs = 0;
   let onlineLastMaxProgress = 0;
   let onlineProgressWatchKey = "";
+  let onlineOverlayLastCountdownSecond = null;
+  let rulesModalOpen = false;
   let leaderboardLoading = false;
 
   function normalizePlayerName(rawName) {
@@ -88,6 +93,49 @@ export function createUiFlowApi({
     ui.playerNameInput.addEventListener("input", () => applyPlayerNameFromInput());
     ui.playerNameInput.addEventListener("change", () => applyPlayerNameFromInput());
     ui.playerNameInput.addEventListener("blur", () => applyPlayerNameFromInput());
+  }
+
+  function clearRaceOverlay() {
+    if (!ui.overlay) {
+      return;
+    }
+    ui.overlay.classList.remove("visible", "overlay-go", "overlay-finish", "overlay-rules", "countdown", COUNTDOWN_BURST_CLASS);
+    ui.overlay.style.removeProperty("--overlay-color");
+    onlineOverlayLastCountdownSecond = null;
+  }
+
+  function openRulesModal() {
+    if (!ui.rulesModal) {
+      return;
+    }
+    ui.rulesModal.hidden = false;
+    document.body.classList.add("modal-open");
+    rulesModalOpen = true;
+  }
+
+  function closeRulesModal() {
+    if (!ui.rulesModal) {
+      return;
+    }
+    ui.rulesModal.hidden = true;
+    document.body.classList.remove("modal-open");
+    rulesModalOpen = false;
+  }
+
+  function initRulesModalUi() {
+    if (ui.rulesButton) {
+      ui.rulesButton.addEventListener("click", () => openRulesModal());
+    }
+    if (ui.rulesClose) {
+      ui.rulesClose.addEventListener("click", () => closeRulesModal());
+    }
+    if (ui.rulesModal) {
+      ui.rulesModal.addEventListener("click", (event) => {
+        if (event.target?.hasAttribute?.("data-rules-close")) {
+          closeRulesModal();
+        }
+      });
+    }
   }
 
   function normalizeOnlineRoomId(rawRoomId) {
@@ -562,6 +610,79 @@ export function createUiFlowApi({
     }
   }
 
+  function showOnlineRulesOverlay() {
+    if (!ui.overlay) {
+      return;
+    }
+    ui.overlay.textContent = RULES_GOAL_TEXT;
+    ui.overlay.classList.remove("countdown", COUNTDOWN_BURST_CLASS, "overlay-go", "overlay-finish");
+    ui.overlay.classList.add("overlay-rules", "visible");
+    ui.overlay.style.setProperty("--overlay-color", "#ffe4bd");
+  }
+
+  function triggerOnlineCountdownBurst(second) {
+    if (!ui.overlay) {
+      return;
+    }
+    ui.overlay.textContent = String(second);
+    ui.overlay.classList.remove("overlay-rules", "overlay-go", "overlay-finish", COUNTDOWN_BURST_CLASS);
+    ui.overlay.classList.add("countdown", "visible");
+    ui.overlay.style.removeProperty("--overlay-color");
+    void ui.overlay.offsetWidth;
+    ui.overlay.classList.add(COUNTDOWN_BURST_CLASS);
+  }
+
+  function syncOnlinePhaseOverlay() {
+    if (state.playMode !== "online") {
+      return;
+    }
+
+    if (state.currentScreen !== "race") {
+      clearRaceOverlay();
+      return;
+    }
+
+    const snapshot = state.online?.snapshot;
+    if (!snapshot) {
+      clearRaceOverlay();
+      return;
+    }
+
+    const phase = String(snapshot.phase || "");
+    if (phase === "rules") {
+      onlineOverlayLastCountdownSecond = null;
+      showOnlineRulesOverlay();
+      return;
+    }
+
+    if (phase === "countdown") {
+      let remainMs = Number(snapshot.countdownRemainingMs);
+      if (!Number.isFinite(remainMs)) {
+        const countdownEndsAtMs = Number(snapshot.countdownEndsAtMs);
+        const serverNowMs = Number(snapshot.serverNowMs);
+        if (Number.isFinite(countdownEndsAtMs)) {
+          if (Number.isFinite(serverNowMs) && Number.isFinite(state.online?.lastSnapshotAtMs)) {
+            const drift = Date.now() - state.online.lastSnapshotAtMs;
+            remainMs = countdownEndsAtMs - (serverNowMs + Math.max(0, drift));
+          } else {
+            remainMs = countdownEndsAtMs - Date.now();
+          }
+        }
+      }
+      remainMs = Number.isFinite(remainMs) ? Math.max(0, remainMs) : 0;
+      const second = Math.max(1, Math.min(ONLINE_COUNTDOWN_MAX_SECONDS, Math.ceil(remainMs / 1000)));
+      if (onlineOverlayLastCountdownSecond !== second) {
+        onlineOverlayLastCountdownSecond = second;
+        triggerOnlineCountdownBurst(second);
+      } else if (ui.overlay) {
+        ui.overlay.classList.add("visible", "countdown");
+      }
+      return;
+    }
+
+    clearRaceOverlay();
+  }
+
   function resetOnlineFinishWatchers() {
     lastHandledOnlineFinishKey = "";
     onlineNoProgressSinceMs = 0;
@@ -571,6 +692,7 @@ export function createUiFlowApi({
 
   function wireUi() {
     initPlayerNameUi();
+    initRulesModalUi();
     initOnlineRoomUi();
     renderLeaderboardTrackOptions();
     renderLeaderboardRows([]);
@@ -681,12 +803,20 @@ export function createUiFlowApi({
     if (!onlineInputPumpId) {
       onlineInputPumpId = window.setInterval(() => {
         pushOnlineInput(false);
+        syncOnlinePhaseOverlay();
         maybeHandleOnlineFinishedSnapshot();
       }, ONLINE_INPUT_PUSH_INTERVAL_MS);
     }
   }
 
   function onKeyDown(event) {
+    const isEscape = event.code === "Escape" || event.key === "Escape";
+    if (isEscape && rulesModalOpen) {
+      event.preventDefault();
+      closeRulesModal();
+      return;
+    }
+
     if (state.currentScreen === "race" && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(event.code || event.key)) {
       event.preventDefault();
     }
@@ -722,13 +852,20 @@ export function createUiFlowApi({
     document.body.classList.toggle("race-screen-active", name === "race");
 
     if (name !== "race") {
-      ui.overlay.classList.remove("visible");
+      clearRaceOverlay();
     } else if (state.phaserGame) {
       setTimeout(() => {
         if (state.phaserGame) {
           state.phaserGame.scale.refresh();
         }
       }, 0);
+      if (state.playMode === "online") {
+        syncOnlinePhaseOverlay();
+      }
+    }
+
+    if (name !== "main" && rulesModalOpen) {
+      closeRulesModal();
     }
 
     syncOnlineRoomPickerVisibility();
@@ -889,6 +1026,7 @@ export function createUiFlowApi({
 
     if (state.playMode === "online") {
       state.race = null;
+      clearRaceOverlay();
       showScreen("race");
       syncRaceMusic();
 
@@ -945,6 +1083,7 @@ export function createUiFlowApi({
     const sceneNowMs = Number.isFinite(state.raceScene?.time?.now) ? state.raceScene.time.now : performance.now();
     state.race = createRaceState(trackDef, selectedSnake, debugMode, sceneNowMs);
 
+    clearRaceOverlay();
     showScreen("race");
     syncRaceMusic();
 

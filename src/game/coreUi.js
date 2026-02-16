@@ -9,7 +9,7 @@ import { renderRace as renderRaceView, renderIdle as renderIdleView } from "./re
 export function createCoreUiApi({ ui, state, getRacerMotionHeading } = {}) {
   function showOverlayMessage(text, mode = "", color = null) {
     ui.overlay.textContent = text;
-    ui.overlay.classList.remove("countdown", COUNTDOWN_BURST_ANIM_CLASS, "overlay-go", "overlay-finish");
+    ui.overlay.classList.remove("countdown", COUNTDOWN_BURST_ANIM_CLASS, "overlay-go", "overlay-finish", "overlay-rules");
     if (mode) {
       ui.overlay.classList.add(mode);
     }
