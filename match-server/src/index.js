@@ -34,6 +34,7 @@ app.get("/config", (_req, res) => {
     nakamaEnabled: nakamaClient.enabled,
     nakamaUrl: nakamaClient.baseUrl || null,
     nakamaRpc: nakamaClient.rpcId,
+    nakamaLeaderboardRpc: nakamaClient.leaderboardRpcId,
     raceDurationStatsFile,
   });
 });
@@ -71,6 +72,53 @@ app.get("/rooms/race", async (req, res) => {
   } catch (error) {
     console.error("[match-server] /rooms/race failed:", error);
     res.status(500).json({ ok: false, error: "rooms_query_failed" });
+  }
+});
+
+app.get("/leaderboard/:trackId", async (req, res) => {
+  const trackId = normalizeTrackId(typeof req.params?.trackId === "string" ? req.params.trackId : "");
+  if (!trackId) {
+    res.status(400).json({ ok: false, error: "track_id_required" });
+    return;
+  }
+
+  const limitRaw = Number.parseInt(String(req.query?.limit ?? "20"), 10);
+  const limit = clampNumber(Number.isFinite(limitRaw) ? limitRaw : 20, 1, 100);
+
+  if (!nakamaClient.enabled) {
+    res.status(200).json({
+      ok: true,
+      disabled: true,
+      trackId,
+      leaderboardId: `track_${trackId}_time`,
+      records: [],
+    });
+    return;
+  }
+
+  try {
+    const result = await nakamaClient.getTrackLeaderboard({ trackId, limit });
+    if (!result?.ok) {
+      res.status(502).json({
+        ok: false,
+        error: result?.error || result?.reason || "leaderboard_fetch_failed",
+        details: result || null,
+      });
+      return;
+    }
+
+    res.status(200).json({
+      ok: true,
+      trackId: result.trackId || trackId,
+      leaderboardId: result.leaderboardId || `track_${trackId}_time`,
+      records: Array.isArray(result.records) ? result.records : [],
+      nextCursor: result.nextCursor || null,
+      prevCursor: result.prevCursor || null,
+      disabled: false,
+    });
+  } catch (error) {
+    console.error("[match-server] /leaderboard failed:", error);
+    res.status(500).json({ ok: false, error: "leaderboard_internal_error" });
   }
 });
 
@@ -144,6 +192,13 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 function clampNumber(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function normalizeTrackId(trackId) {
+  return String(trackId || "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_");
 }
 
 async function readRaceDurationStats() {

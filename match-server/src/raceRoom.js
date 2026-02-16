@@ -5,7 +5,7 @@ import { buildTrackRuntime, sampleTrack, projectOnTrack } from "../shared-game/t
 
 const DEFAULT_TRACK_LENGTH = 12000;
 const COUNTDOWN_MS = 3000;
-const LAPS_TO_FINISH = 3;
+const LAPS_TO_FINISH = 0;
 
 const STEER_RESPONSE_PER_SEC = 30.0;
 const BASE_TURN_RATE = 2.9;
@@ -208,10 +208,11 @@ export class RaceRoom extends Room {
 
     this.trackDef = resolveTrackDef(this.trackId);
     this.trackRuntime = this.trackDef ? buildTrackRuntime(this.trackDef) : null;
-    this.trackLengthMeters = Math.max(
-      DEFAULT_TRACK_LENGTH,
-      (this.trackRuntime?.totalLength || DEFAULT_TRACK_LENGTH) * LAPS_TO_FINISH
-    );
+    this.lapsToFinish = Math.max(0, Math.floor(safeNumber(options?.lapsToFinish, LAPS_TO_FINISH)));
+    this.trackLengthMeters =
+      this.lapsToFinish > 0
+        ? Math.max(DEFAULT_TRACK_LENGTH, (this.trackRuntime?.totalLength || DEFAULT_TRACK_LENGTH) * this.lapsToFinish)
+        : Number.POSITIVE_INFINITY;
 
     this.pickups = this.trackRuntime ? createTrackPickups(this.trackRuntime) : [];
     this.bodyItems = this.trackRuntime ? createTrackBodyItems(this.trackRuntime, this.trackId, this.pickups) : [];
@@ -568,7 +569,7 @@ export class RaceRoom extends Room {
       this.collectTrackObjects(player, nowMs);
 
       player.progress += player.speed * dt;
-      if (player.progress >= this.trackLengthMeters) {
+      if (this.lapsToFinish > 0 && player.progress >= this.trackLengthMeters) {
         player.finished = true;
         player.finishTimeMs = Math.max(0, nowMs - this.raceStartedAtMs);
       }

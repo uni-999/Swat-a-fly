@@ -13,7 +13,7 @@ import { createAiApi } from "./ai.js";
 import { createRaceFlowApi } from "./raceFlow.js";
 import { createRaceState, randomizeBodyItemPosition } from "./raceSetup.js";
 import { createHudApi } from "./hud.js";
-import { createSceneApi } from "./scene.js?v=20260215_online_hotfix_1";
+import { createSceneApi } from "./scene.js?v=20260216_leaderboard_1";
 import { createUiFlowApi } from "./uiFlow.js";
 import { createCoreUiApi } from "./coreUi.js";
 import { createOnlineRoomClientApi } from "./onlineRoomClient.js";
@@ -71,6 +71,7 @@ export function bootstrapApp() {
   const {
     startOnlineRace,
     listOnlineRooms,
+    getTrackLeaderboard,
     disconnectOnlineRace,
     sendOnlineInput,
   } = createOnlineRoomClientApi({ state });
@@ -92,6 +93,7 @@ export function bootstrapApp() {
     syncRaceMusic: (...args) => syncRaceMusicRef(...args),
     startOnlineRace,
     listOnlineRooms,
+    getTrackLeaderboard,
     disconnectOnlineRace,
     sendOnlineInput,
     showToast,

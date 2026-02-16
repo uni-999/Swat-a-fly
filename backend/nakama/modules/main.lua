@@ -83,11 +83,69 @@ local function rpc_submit_race_time(_context, payload)
   })
 end
 
+local function rpc_get_track_leaderboard(_context, payload)
+  local data = nk.json_decode(payload or "{}")
+  if type(data) == "string" then
+    data = nk.json_decode(data)
+  end
+  if type(data) ~= "table" then
+    error("invalid payload")
+  end
+
+  local track_id = data.track_id
+  local leaderboard_id = data.leaderboard_id
+  if leaderboard_id == nil or tostring(leaderboard_id) == "" then
+    if track_id == nil or tostring(track_id) == "" then
+      error("track_id or leaderboard_id is required")
+    end
+    leaderboard_id = "track_" .. tostring(track_id) .. "_time"
+  end
+
+  local limit = tonumber(data.limit) or 20
+  if limit < 1 then
+    limit = 1
+  end
+  if limit > 100 then
+    limit = 100
+  end
+
+  local cursor = data.cursor
+  local records, _, next_cursor, prev_cursor = nk.leaderboard_records_list(
+    tostring(leaderboard_id),
+    nil,
+    math.floor(limit),
+    cursor,
+    nil
+  )
+
+  local result = {}
+  for _, record in ipairs(records) do
+    table.insert(result, {
+      owner_id = record.owner_id,
+      username = record.username,
+      score = record.score,
+      subscore = record.subscore,
+      rank = record.rank,
+      metadata = record.metadata or {}
+    })
+  end
+
+  return nk.json_encode({
+    ok = true,
+    leaderboard_id = tostring(leaderboard_id),
+    track_id = tostring(track_id or ""),
+    records = result,
+    next_cursor = next_cursor,
+    prev_cursor = prev_cursor
+  })
+end
+
 nk.register_rpc(rpc_submit_race_time, "submit_race_time")
+nk.register_rpc(rpc_get_track_leaderboard, "get_track_leaderboard")
 
 local ok, err = pcall(ensure_leaderboards)
 if not ok then
   nk.logger_warn("Leaderboard bootstrap failed: " .. tostring(err))
 end
 
-nk.logger_info("Nakama runtime module loaded: submit_race_time RPC registered.")
+nk.logger_info("Nakama runtime module loaded: submit_race_time + get_track_leaderboard RPC registered.")

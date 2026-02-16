@@ -1,2 +1,3 @@
 _data/postgres/
 !_data/.gitkeep
+.env

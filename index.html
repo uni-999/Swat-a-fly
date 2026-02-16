@@ -31,8 +31,36 @@
         </label>
         <button id="btn-offline" class="btn primary">Играть офлайн</button>
         <button id="btn-online" class="btn ghost">Играть онлайн</button>
-        <button id="btn-leaderboards" class="btn ghost">Таблица лидеров (скоро)</button>
+        <button id="btn-leaderboards" class="btn ghost">Таблица лидеров</button>
         <button id="btn-settings" class="btn ghost">Настройки (скоро)</button>
+      </div>
+    </section>
+
+    <section id="screen-leaderboard" class="screen">
+      <div class="panel">
+        <h2>Таблица лидеров</h2>
+        <div class="online-room-actions">
+          <label class="menu-field" for="leaderboard-track-select">
+            <span>Трасса</span>
+            <select id="leaderboard-track-select"></select>
+          </label>
+          <button id="leaderboard-refresh" class="btn ghost" type="button">Обновить</button>
+        </div>
+        <p id="leaderboard-status" class="mode-note">Выберите трассу и обновите таблицу.</p>
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Игрок</th>
+              <th>Трасса</th>
+              <th>Лучшее время</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-body"></tbody>
+        </table>
+        <div class="actions">
+          <button id="leaderboard-back" class="btn ghost">Назад</button>
+        </div>
       </div>
     </section>
 
@@ -150,6 +178,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
   <script src="assets/vendor/colyseus.js"></script>
-  <script type="module" src="script.js?v=20260215_online_hotfix_2"></script>
+  <script type="module" src="script.js?v=20260216_leaderboard_1"></script>
 </body>
 </html>

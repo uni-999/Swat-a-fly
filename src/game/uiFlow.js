@@ -10,6 +10,7 @@ export function createUiFlowApi({
   syncRaceMusic,
   startOnlineRace,
   listOnlineRooms,
+  getTrackLeaderboard,
   disconnectOnlineRace,
   sendOnlineInput,
   showToast,
@@ -23,9 +24,12 @@ export function createUiFlowApi({
   const ONLINE_ROOM_ID_MAX_LENGTH = 64;
   const ONLINE_INPUT_PUSH_INTERVAL_MS = 50;
   const ONLINE_INPUT_KEEPALIVE_MS = 220;
+  const LEADERBOARD_LIMIT = 20;
   let onlineInputPumpId = null;
   let lastOnlineInputSignature = "";
   let lastOnlineInputSentAtMs = 0;
+  let lastHandledOnlineFinishKey = "";
+  let leaderboardLoading = false;
 
   function normalizePlayerName(rawName) {
     return String(rawName ?? "")
@@ -87,6 +91,25 @@ export function createUiFlowApi({
     return String(rawRoomId ?? "")
       .trim()
       .slice(0, ONLINE_ROOM_ID_MAX_LENGTH);
+  }
+
+  function normalizeTrackId(rawTrackId) {
+    return String(rawTrackId ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/-/g, "_");
+  }
+
+  function resolveTrackDef(trackId) {
+    const normalized = normalizeTrackId(trackId);
+    return TRACK_DEFS.find((track) => normalizeTrackId(track.id) === normalized) || TRACK_DEFS[0] || null;
+  }
+
+  function getResolvedLeaderboardTrackId() {
+    const selected = normalizeTrackId(ui.leaderboardTrackSelect?.value || "");
+    const stateTrack = normalizeTrackId(state.leaderboardTrackId || "");
+    const selectedTrack = normalizeTrackId(state.selectedTrackId || "");
+    return selected || stateTrack || selectedTrack || normalizeTrackId(TRACK_DEFS[0]?.id || "");
   }
 
   function ensureOnlineRoomPickerDom() {
@@ -277,9 +300,221 @@ export function createUiFlowApi({
     }
   }
 
+  function setLeaderboardStatus(text, { error = false } = {}) {
+    if (!ui.leaderboardStatus) {
+      return;
+    }
+    ui.leaderboardStatus.textContent = text;
+    ui.leaderboardStatus.style.color = error ? "#ffbaa2" : "";
+  }
+
+  function renderLeaderboardTrackOptions() {
+    if (!ui.leaderboardTrackSelect) {
+      return;
+    }
+    const resolvedTrack = resolveTrackDef(getResolvedLeaderboardTrackId());
+    if (resolvedTrack) {
+      state.leaderboardTrackId = resolvedTrack.id;
+    }
+
+    ui.leaderboardTrackSelect.innerHTML = "";
+    for (const track of TRACK_DEFS) {
+      const option = document.createElement("option");
+      option.value = track.id;
+      option.textContent = track.name;
+      ui.leaderboardTrackSelect.appendChild(option);
+    }
+    if (state.leaderboardTrackId) {
+      ui.leaderboardTrackSelect.value = state.leaderboardTrackId;
+    }
+  }
+
+  function renderLeaderboardRows(rows = []) {
+    if (!ui.leaderboardBody) {
+      return;
+    }
+    ui.leaderboardBody.innerHTML = "";
+    if (!rows.length) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td colspan="4">Нет записей для выбранной трассы.</td>`;
+      ui.leaderboardBody.appendChild(tr);
+      return;
+    }
+    rows.forEach((row, index) => {
+      const tr = document.createElement("tr");
+      const rowTrackDef = resolveTrackDef(row?.metadata?.track_id || row?.trackId || state.leaderboardTrackId);
+      const rowTrackName = rowTrackDef?.name || state.leaderboardTrackId || "-";
+      tr.innerHTML = `
+      <td>${Number.isFinite(row?.rank) ? row.rank : index + 1}</td>
+      <td>${row?.username || "-"}</td>
+      <td>${rowTrackName}</td>
+      <td>${Number.isFinite(row?.score) ? formatMs(row.score) : "-"}</td>
+    `;
+      ui.leaderboardBody.appendChild(tr);
+    });
+  }
+
+  async function refreshLeaderboard({ silent = false } = {}) {
+    if (!ui.leaderboardTrackSelect || !ui.leaderboardBody) {
+      if (!silent) {
+        showToast("Экран таблицы лидеров недоступен в этой сборке интерфейса.");
+      }
+      return;
+    }
+
+    const trackDef = resolveTrackDef(getResolvedLeaderboardTrackId());
+    if (!trackDef) {
+      setLeaderboardStatus("Не удалось определить трассу.", { error: true });
+      renderLeaderboardRows([]);
+      return;
+    }
+
+    state.leaderboardTrackId = trackDef.id;
+    ui.leaderboardTrackSelect.value = trackDef.id;
+    if (leaderboardLoading) {
+      return;
+    }
+
+    if (typeof getTrackLeaderboard !== "function") {
+      setLeaderboardStatus("Сервис лидерборда недоступен.", { error: true });
+      renderLeaderboardRows([]);
+      if (!silent) {
+        showToast("Не удалось загрузить лидерборд: клиентский API не подключен.");
+      }
+      return;
+    }
+
+    leaderboardLoading = true;
+    if (ui.leaderboardRefresh) {
+      ui.leaderboardRefresh.disabled = true;
+    }
+    setLeaderboardStatus(`Загрузка: ${trackDef.name}...`);
+
+    const result = await getTrackLeaderboard({
+      trackId: trackDef.id,
+      limit: LEADERBOARD_LIMIT,
+    });
+
+    leaderboardLoading = false;
+    if (ui.leaderboardRefresh) {
+      ui.leaderboardRefresh.disabled = false;
+    }
+
+    if (!result?.ok) {
+      renderLeaderboardRows([]);
+      setLeaderboardStatus(`Не удалось загрузить таблицу: ${result?.error || "unknown_error"}`, { error: true });
+      if (!silent) {
+        showToast(`Лидерборд недоступен: ${result?.error || "unknown_error"}`);
+      }
+      return;
+    }
+
+    const rows = Array.isArray(result.records) ? result.records : [];
+    renderLeaderboardRows(rows);
+    if (result.disabled) {
+      setLeaderboardStatus("Nakama отключен: таблица пока пустая.");
+    } else {
+      setLeaderboardStatus(`Трасса: ${trackDef.name}. Записей: ${rows.length}.`);
+    }
+    if (!silent) {
+      showToast(`Лидерборд обновлён: ${rows.length} записей.`);
+    }
+  }
+
+  function renderResultsRows(rows = []) {
+    if (!ui.resultsBody) {
+      return;
+    }
+    ui.resultsBody.innerHTML = "";
+    for (const row of rows) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+      <td>${row.rank}</td>
+      <td>${row.name}</td>
+      <td>${row.snake}</td>
+      <td>${row.completedLap ? formatMs(row.timeMs) : row.progressLabel}</td>
+    `;
+      ui.resultsBody.appendChild(tr);
+    }
+  }
+
+  function buildOnlineResultsRows(snapshot) {
+    const players = Array.isArray(snapshot?.players) ? snapshot.players : [];
+    const sorted = players
+      .map((player) => {
+        const finishTimeMs = Number(player?.finishTimeMs);
+        const hasFinishTime = Number.isFinite(finishTimeMs) && finishTimeMs >= 0;
+        const progress = Math.max(0, Number(player?.progress) || 0);
+        return {
+          name: String(player?.displayName || "Player"),
+          snake: String(player?.typeId || player?.snakeId || "online"),
+          finishTimeMs: hasFinishTime ? Math.floor(finishTimeMs) : null,
+          progress,
+        };
+      })
+      .sort((a, b) => {
+        const aFinished = Number.isFinite(a.finishTimeMs);
+        const bFinished = Number.isFinite(b.finishTimeMs);
+        if (aFinished !== bFinished) {
+          return aFinished ? -1 : 1;
+        }
+        if (aFinished && bFinished) {
+          return a.finishTimeMs - b.finishTimeMs;
+        }
+        return b.progress - a.progress;
+      });
+
+    return sorted.map((entry, index) => ({
+      rank: index + 1,
+      name: entry.name,
+      snake: entry.snake,
+      completedLap: Number.isFinite(entry.finishTimeMs),
+      timeMs: Number.isFinite(entry.finishTimeMs) ? entry.finishTimeMs : NaN,
+      progressLabel: `Прогресс: ${Math.round(entry.progress)} м`,
+    }));
+  }
+
+  function getOnlineFinishKey(snapshot) {
+    const roomId = String(snapshot?.roomId || state.online?.roomId || "-");
+    const raceEndMs = Number(snapshot?.raceEndedAtMs);
+    if (Number.isFinite(raceEndMs) && raceEndMs > 0) {
+      return `${roomId}|${raceEndMs}`;
+    }
+    const tick = Number(snapshot?.tick);
+    return `${roomId}|tick:${Number.isFinite(tick) ? tick : "?"}`;
+  }
+
+  function maybeHandleOnlineFinishedSnapshot() {
+    if (state.playMode !== "online" || state.currentScreen !== "race") {
+      return;
+    }
+    const snapshot = state.online?.snapshot;
+    if (!snapshot || snapshot.phase !== "finished") {
+      return;
+    }
+    const finishKey = getOnlineFinishKey(snapshot);
+    if (finishKey === lastHandledOnlineFinishKey) {
+      return;
+    }
+    lastHandledOnlineFinishKey = finishKey;
+
+    const trackDef = resolveTrackDef(snapshot.trackId || state.online?.trackId || state.selectedTrackId);
+    if (trackDef) {
+      state.lastFinishedTrackId = trackDef.id;
+      state.selectedTrackId = trackDef.id;
+    }
+    state.lastResults = buildOnlineResultsRows(snapshot);
+    renderResultsRows(state.lastResults);
+    showScreen("results");
+    void disconnectOnlineRace?.();
+    showToast("Финиш онлайн-заезда: таблица результатов обновлена.");
+  }
+
   function wireUi() {
     initPlayerNameUi();
     initOnlineRoomUi();
+    renderLeaderboardTrackOptions();
+    renderLeaderboardRows([]);
 
     document.getElementById("btn-offline").addEventListener("click", () => {
       state.playMode = "offline";
@@ -298,9 +533,15 @@ export function createUiFlowApi({
       }
     });
 
-    document.getElementById("btn-leaderboards").addEventListener("click", () =>
-      showToast("Таблица лидеров будет подключена отдельным экраном в следующем шаге.")
-    );
+    document.getElementById("btn-leaderboards").addEventListener("click", () => {
+      const baseTrack = resolveTrackDef(state.selectedTrackId || TRACK_DEFS[0]?.id);
+      if (baseTrack) {
+        state.leaderboardTrackId = baseTrack.id;
+      }
+      renderLeaderboardTrackOptions();
+      showScreen("leaderboard");
+      void refreshLeaderboard();
+    });
 
     document.getElementById("btn-settings").addEventListener("click", () =>
       showToast("Настройки будут доработаны после стабилизации online-flow.")
@@ -346,6 +587,28 @@ export function createUiFlowApi({
       showScreen("main");
     });
 
+    if (ui.leaderboardTrackSelect) {
+      ui.leaderboardTrackSelect.addEventListener("change", () => {
+        const trackDef = resolveTrackDef(ui.leaderboardTrackSelect.value);
+        if (!trackDef) {
+          return;
+        }
+        state.leaderboardTrackId = trackDef.id;
+        void refreshLeaderboard({ silent: true });
+      });
+    }
+
+    if (ui.leaderboardRefresh) {
+      ui.leaderboardRefresh.addEventListener("click", () => {
+        void refreshLeaderboard();
+      });
+    }
+
+    const leaderboardBack = document.getElementById("leaderboard-back");
+    if (leaderboardBack) {
+      leaderboardBack.addEventListener("click", () => showScreen("main"));
+    }
+
     window.addEventListener("keydown", onKeyDown, { passive: false });
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("resize", () => {
@@ -357,6 +620,7 @@ export function createUiFlowApi({
     if (!onlineInputPumpId) {
       onlineInputPumpId = window.setInterval(() => {
         pushOnlineInput(false);
+        maybeHandleOnlineFinishedSnapshot();
       }, ONLINE_INPUT_PUSH_INTERVAL_MS);
     }
   }
@@ -387,7 +651,12 @@ export function createUiFlowApi({
   }
 
   function showScreen(name) {
-    Object.entries(ui.screens).forEach(([id, node]) => node.classList.toggle("active", id === name));
+    Object.entries(ui.screens).forEach(([id, node]) => {
+      if (!node) {
+        return;
+      }
+      node.classList.toggle("active", id === name);
+    });
     state.currentScreen = name;
     document.body.classList.toggle("race-screen-active", name === "race");
 
@@ -408,6 +677,10 @@ export function createUiFlowApi({
       } else {
         renderOnlineRoomOptions();
       }
+    }
+    if (name === "leaderboard") {
+      renderLeaderboardTrackOptions();
+      void refreshLeaderboard({ silent: true });
     }
 
     syncRaceMusic();
@@ -551,6 +824,7 @@ export function createUiFlowApi({
     state.selectedTrackId = trackDef.id;
     state.lastFinishedTrackId = null;
     state.keyMap.clear();
+    lastHandledOnlineFinishKey = "";
 
     if (state.playMode === "online") {
       state.race = null;

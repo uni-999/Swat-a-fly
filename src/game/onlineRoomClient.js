@@ -5,6 +5,9 @@ const LOCAL_COLYSEUS_SCRIPT_PATH = "/assets/vendor/colyseus.js";
 const ONLINE_USER_ID_KEY = "snake_online_user_id_v1";
 const ONLINE_PING_INTERVAL_MS = 4000;
 const MATCH_PROXY_PATH = "/match/";
+const LEADERBOARD_LIMIT_MIN = 1;
+const LEADERBOARD_LIMIT_MAX = 100;
+const LEADERBOARD_LIMIT_DEFAULT = 20;
 
 export function createOnlineRoomClientApi({ state } = {}) {
   let colyseusModulePromise = null;
@@ -141,6 +144,32 @@ export function createOnlineRoomClientApi({ state } = {}) {
     }
   }
 
+  function normalizeLeaderboardLimit(rawLimit) {
+    const parsed = Number.parseInt(rawLimit, 10);
+    if (!Number.isFinite(parsed)) {
+      return LEADERBOARD_LIMIT_DEFAULT;
+    }
+    return Math.max(LEADERBOARD_LIMIT_MIN, Math.min(LEADERBOARD_LIMIT_MAX, parsed));
+  }
+
+  function makeLeaderboardApiUrl(httpBase, trackId = "", limit = LEADERBOARD_LIMIT_DEFAULT) {
+    if (!httpBase) {
+      return "";
+    }
+    const normalizedTrackId = String(trackId || "").trim();
+    if (!normalizedTrackId) {
+      return "";
+    }
+    try {
+      const baseWithSlash = `${httpBase.replace(/\/+$/, "")}/`;
+      const url = new URL(`leaderboard/${encodeURIComponent(normalizedTrackId)}`, baseWithSlash);
+      url.searchParams.set("limit", String(normalizeLeaderboardLimit(limit)));
+      return url.toString();
+    } catch (error) {
+      return "";
+    }
+  }
+
   function getRoomsHttpCandidates(trackId = "") {
     const candidates = [];
     const push = (url) => {
@@ -157,6 +186,27 @@ export function createOnlineRoomClientApi({ state } = {}) {
     for (const wsEndpoint of getMatchServerWsCandidates()) {
       const httpBase = toHttpEndpoint(wsEndpoint);
       push(makeRoomsApiUrl(httpBase, trackId));
+    }
+
+    return candidates;
+  }
+
+  function getLeaderboardHttpCandidates(trackId = "", limit = LEADERBOARD_LIMIT_DEFAULT) {
+    const candidates = [];
+    const push = (url) => {
+      if (!url || candidates.includes(url)) {
+        return;
+      }
+      candidates.push(url);
+    };
+
+    if (typeof window !== "undefined" && window.location?.origin) {
+      push(makeLeaderboardApiUrl(`${window.location.origin}${MATCH_PROXY_PATH}`, trackId, limit));
+    }
+
+    for (const wsEndpoint of getMatchServerWsCandidates()) {
+      const httpBase = toHttpEndpoint(wsEndpoint);
+      push(makeLeaderboardApiUrl(httpBase, trackId, limit));
     }
 
     return candidates;
@@ -455,6 +505,67 @@ export function createOnlineRoomClientApi({ state } = {}) {
     }
   }
 
+  function normalizeLeaderboardRows(rows) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row, index) => {
+        const rank = Number(row?.rank);
+        const score = Number(row?.score);
+        return {
+          rank: Number.isFinite(rank) && rank > 0 ? Math.floor(rank) : index + 1,
+          username: String(row?.username || row?.displayName || row?.owner_id || `Player ${index + 1}`),
+          score: Number.isFinite(score) ? Math.max(0, Math.floor(score)) : null,
+          ownerId: row?.owner_id ? String(row.owner_id) : null,
+          metadata: row?.metadata && typeof row.metadata === "object" ? row.metadata : {},
+        };
+      })
+      .sort((a, b) => a.rank - b.rank);
+  }
+
+  async function getTrackLeaderboard({ trackId, limit = LEADERBOARD_LIMIT_DEFAULT } = {}) {
+    const normalizedTrackId = String(trackId || "").trim();
+    if (!normalizedTrackId) {
+      return { ok: false, error: "track_id_required", records: [] };
+    }
+
+    const candidates = getLeaderboardHttpCandidates(normalizedTrackId, limit);
+    let lastError = null;
+
+    for (const endpoint of candidates) {
+      if (!endpoint) {
+        continue;
+      }
+      try {
+        const response = await fetch(endpoint, {
+          method: "GET",
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) {
+          lastError = new Error(`leaderboard_http_${response.status}`);
+          continue;
+        }
+        const payload = await response.json();
+        const rows = normalizeLeaderboardRows(payload?.records);
+        return {
+          ok: true,
+          endpoint,
+          trackId: payload?.trackId || normalizedTrackId,
+          leaderboardId: payload?.leaderboardId || null,
+          records: rows,
+          disabled: Boolean(payload?.disabled),
+        };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    return {
+      ok: false,
+      error: lastError?.message || "leaderboard_unavailable",
+      endpoint: null,
+      records: [],
+    };
+  }
+
   function sendOnlineInput(input) {
     const room = state.online?.room;
     if (!room || state.online?.status !== "connected") {
@@ -475,6 +586,7 @@ export function createOnlineRoomClientApi({ state } = {}) {
   return {
     startOnlineRace,
     listOnlineRooms,
+    getTrackLeaderboard,
     disconnectOnlineRace,
     sendOnlineInput,
     ensureOnlineUserId,
