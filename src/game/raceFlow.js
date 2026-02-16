@@ -11,7 +11,24 @@ import {
   RACE_TIMEOUT_MS,
   STORAGE_PREFIX,
 } from "./config.js";
+import { SNAKES } from "./catalog.js";
 import { clamp } from "./utils.js";
+
+const snakeNameById = new Map(
+  (Array.isArray(SNAKES) ? SNAKES : [])
+    .filter((snake) => snake?.id && snake?.name)
+    .map((snake) => [String(snake.id).toLowerCase(), String(snake.name)])
+);
+
+function resolveSnakeName(rawSnakeId) {
+  const normalized = String(rawSnakeId ?? "")
+    .trim()
+    .toLowerCase();
+  if (!normalized) {
+    return "Змея";
+  }
+  return snakeNameById.get(normalized) || String(rawSnakeId);
+}
 
 export function createRaceFlowApi({
   ui,
@@ -173,7 +190,7 @@ export function createRaceFlowApi({
     state.lastResults = ordered.map((racer, index) => ({
       rank: index + 1,
       name: racer.name,
-      snake: racer.typeId,
+      snake: resolveSnakeName(racer.typeId),
       timeMs: racer.finishTimeMs,
       completedLap: Boolean(racer.completedLap),
       progressLabel: formatRacerProgressLabel(race, racer),
@@ -204,7 +221,7 @@ export function createRaceFlowApi({
       tr.innerHTML = `
       <td>${row.rank}</td>
       <td>${row.name}</td>
-      <td>${row.snake}</td>
+      <td>${resolveSnakeName(row.snake)}</td>
       <td>${row.completedLap ? formatMs(row.timeMs) : row.progressLabel}</td>
     `;
       ui.resultsBody.appendChild(tr);

@@ -19,8 +19,8 @@ export const ITEM_SPRITES = {
 export const SNAKES = [
   {
     id: "speedster",
-    name: "Speedster",
-    flavor: "Максималка выше всех, но тяжелее повернуть",
+    name: "Скоростник",
+    flavor: "Максимальная скорость выше всех, но сложнее входить в повороты",
     color: "#58f4ff",
     stats: { maxSpeed: 238, accel: 330, drag: 1.3, turnRate: 2.52, offroadPenalty: 0.63, mass: 1.0 },
     body: { segments: 18, spacing: 7.6, waveAmp: 4.8, waveFreq: 0.9, waveSpeed: 5.2, taper: 0.62 },
@@ -28,7 +28,7 @@ export const SNAKES = [
   },
   {
     id: "handler",
-    name: "Handler",
+    name: "Рулевой",
     flavor: "Лучший контроль в поворотах",
     color: "#9fff77",
     stats: { maxSpeed: 214, accel: 318, drag: 1.25, turnRate: 3.0, offroadPenalty: 0.67, mass: 1.0 },
@@ -37,8 +37,8 @@ export const SNAKES = [
   },
   {
     id: "bully",
-    name: "Bully",
-    flavor: "Тяжелый корпус, сильнее толчки",
+    name: "Тяжеловес",
+    flavor: "Тяжелый корпус и более сильные толчки",
     color: "#ff8c7c",
     stats: { maxSpeed: 206, accel: 292, drag: 1.18, turnRate: 2.3, offroadPenalty: 0.71, mass: 1.35 },
     body: { segments: 22, spacing: 8.8, waveAmp: 2.6, waveFreq: 0.72, waveSpeed: 3.1, taper: 0.72 },
@@ -46,7 +46,7 @@ export const SNAKES = [
   },
   {
     id: "trickster",
-    name: "Trickster",
+    name: "Хитрец",
     flavor: "Почти не теряет темп вне дороги",
     color: "#d6a7ff",
     stats: { maxSpeed: 222, accel: 305, drag: 1.22, turnRate: 2.72, offroadPenalty: 0.82, mass: 0.95 },

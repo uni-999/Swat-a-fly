@@ -117,7 +117,8 @@ export function createRaceState(trackDef, selectedSnake, debugMode, startMs = pe
 }
 
 export function buildRacerDisplayName({ snake, profile, isPlayer, isProbe }) {
-  const snakeToken = normalizeNameToken(snake?.id || "snake");
+  const snakeSource = snake?.name || snake?.id || "змея";
+  const snakeToken = normalizeNameToken(snakeSource) || "змея";
   if (isPlayer) {
     return `игрок_${snakeToken}`;
   }

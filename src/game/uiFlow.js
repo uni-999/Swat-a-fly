@@ -20,7 +20,7 @@ export function createUiFlowApi({
 } = {}) {
   const PLAYER_NAME_STORAGE_KEY = "polzunki_player_name_v1";
   const PLAYER_NAME_MAX_LENGTH = 24;
-  const DEFAULT_PLAYER_NAME = "Player";
+  const DEFAULT_PLAYER_NAME = "Игрок";
   const ONLINE_ROOM_ID_MAX_LENGTH = 64;
   const ONLINE_INPUT_PUSH_INTERVAL_MS = 50;
   const ONLINE_INPUT_KEEPALIVE_MS = 220;
@@ -44,6 +44,24 @@ export function createUiFlowApi({
   let rulesModalOpen = false;
   let aboutModalOpen = false;
   let leaderboardLoading = false;
+  const snakeNameById = new Map(
+    (Array.isArray(SNAKES) ? SNAKES : [])
+      .filter((snake) => snake?.id && snake?.name)
+      .map((snake) => [String(snake.id).toLowerCase(), String(snake.name)])
+  );
+
+  function resolveSnakeName(rawSnakeId) {
+    const normalized = String(rawSnakeId ?? "")
+      .trim()
+      .toLowerCase();
+    if (!normalized) {
+      return "Змея";
+    }
+    if (normalized === "online") {
+      return "Онлайн";
+    }
+    return snakeNameById.get(normalized) || String(rawSnakeId);
+  }
 
   function normalizePlayerName(rawName) {
     return String(rawName ?? "")
@@ -714,7 +732,7 @@ export function createUiFlowApi({
       tr.innerHTML = `
       <td>${row.rank}</td>
       <td>${row.name}</td>
-      <td>${row.snake}</td>
+      <td>${resolveSnakeName(row.snake)}</td>
       <td>${row.completedLap ? formatMs(row.timeMs) : row.progressLabel}</td>
     `;
       ui.resultsBody.appendChild(tr);
@@ -729,8 +747,8 @@ export function createUiFlowApi({
         const hasFinishTime = Number.isFinite(finishTimeMs) && finishTimeMs >= 0;
         const progress = Math.max(0, Number(player?.progress) || 0);
         return {
-          name: String(player?.displayName || "Player"),
-          snake: String(player?.typeId || player?.snakeId || "online"),
+          name: String(player?.displayName || "Игрок"),
+          snake: resolveSnakeName(player?.typeId || player?.snakeId || "online"),
           finishTimeMs: hasFinishTime ? Math.floor(finishTimeMs) : null,
           progress,
         };
@@ -1142,6 +1160,7 @@ export function createUiFlowApi({
       card.innerHTML = `
       <div class="snake-card__header">
         <div class="snake-card__preview" aria-hidden="true">
+          <img class="snake-card__segment snake-card__segment--tip" src="${segmentSprite}" alt="">
           <img class="snake-card__segment snake-card__segment--tail" src="${segmentSprite}" alt="">
           <img class="snake-card__segment snake-card__segment--mid" src="${segmentSprite}" alt="">
           <img class="snake-card__segment snake-card__segment--front" src="${segmentSprite}" alt="">
@@ -1153,9 +1172,9 @@ export function createUiFlowApi({
         </div>
       </div>
       <ul>
-        <li>maxSpeed: ${Math.round(snake.stats.maxSpeed)}</li>
-        <li>turnRate: ${snake.stats.turnRate.toFixed(2)}</li>
-        <li>offroadPenalty: ${(snake.stats.offroadPenalty * 100).toFixed(0)}%</li>
+        <li>Макс. скорость: ${Math.round(snake.stats.maxSpeed)}</li>
+        <li>Поворот: ${snake.stats.turnRate.toFixed(2)}</li>
+        <li>Штраф вне дороги: ${(snake.stats.offroadPenalty * 100).toFixed(0)}%</li>
       </ul>
     `;
       bindPress(card, () => {
@@ -1299,7 +1318,7 @@ export function createUiFlowApi({
       state.onlineRoomId = selectedRoomId;
       const connectResult = await startOnlineRace?.({
         trackId: trackDef.id,
-        playerName: getResolvedPlayerName() || `Player (${selectedSnake.name})`,
+        playerName: getResolvedPlayerName() || `Игрок (${selectedSnake.name})`,
         roomId: selectedRoomId,
         snakeId: selectedSnake.id,
       });

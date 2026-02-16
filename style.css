@@ -143,6 +143,13 @@ body.race-screen-active .app-header {
   pointer-events: none;
 }
 
+body.race-screen-active .app {
+  max-width: none;
+  width: 100%;
+  padding-left: 0;
+  padding-right: 0;
+}
+
 body.race-screen-active .app-header p {
   opacity: 0;
   max-height: 0;
@@ -150,6 +157,8 @@ body.race-screen-active .app-header p {
 }
 
 body.race-screen-active #screen-race {
+  display: flex;
+  justify-content: center;
   margin-top: 0;
 }
 
@@ -399,24 +408,39 @@ body.race-screen-active .app-header h1.title-snake-wave {
 }
 
 .snake-card__segment {
-  width: 25px;
-  height: 25px;
   opacity: 0.94;
 }
 
+.snake-card__segment--tip {
+  width: 12px;
+  height: 12px;
+  left: 4px;
+  top: 23px;
+  opacity: 0.72;
+}
+
 .snake-card__segment--tail {
-  left: 6px;
-  top: 16px;
+  width: 16px;
+  height: 16px;
+  left: 12px;
+  top: 20px;
+  opacity: 0.8;
 }
 
 .snake-card__segment--mid {
-  left: 24px;
-  top: 12px;
+  width: 20px;
+  height: 20px;
+  left: 25px;
+  top: 15px;
+  opacity: 0.88;
 }
 
 .snake-card__segment--front {
+  width: 24px;
+  height: 24px;
   left: 42px;
-  top: 10px;
+  top: 11px;
+  opacity: 0.96;
 }
 
 .snake-card__head {
@@ -424,7 +448,7 @@ body.race-screen-active .app-header h1.title-snake-wave {
   height: 32px;
   left: 60px;
   top: 8px;
-  transform: rotate(6deg);
+  transform: scaleX(-1) rotate(-4deg);
 }
 
 .card.selected {
@@ -870,6 +894,74 @@ body.race-screen-active .app-header h1.title-snake-wave {
   color: #f0d8ba;
 }
 
+.rules-snakes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.rules-snake {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  padding: 10px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+}
+
+.rules-snake__head-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.rules-snake__preview {
+  width: 94px;
+  height: 56px;
+}
+
+.rules-snake h4 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+}
+
+.rules-snake p {
+  margin: 0;
+  color: #f1deca;
+  font-size: 0.87rem;
+  line-height: 1.32;
+}
+
+.rules-snake ul {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  color: #f7e5d0;
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+
+.rules-snake--speedster {
+  border-color: rgba(112, 235, 255, 0.44);
+  background: linear-gradient(135deg, rgba(44, 122, 136, 0.22), rgba(26, 18, 14, 0.32));
+}
+
+.rules-snake--handler {
+  border-color: rgba(160, 255, 130, 0.42);
+  background: linear-gradient(135deg, rgba(70, 138, 64, 0.22), rgba(26, 18, 14, 0.32));
+}
+
+.rules-snake--bully {
+  border-color: rgba(255, 163, 143, 0.42);
+  background: linear-gradient(135deg, rgba(142, 72, 62, 0.22), rgba(26, 18, 14, 0.32));
+}
+
+.rules-snake--trickster {
+  border-color: rgba(224, 175, 255, 0.42);
+  background: linear-gradient(135deg, rgba(116, 73, 151, 0.22), rgba(26, 18, 14, 0.32));
+}
+
 .rules-items-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -1165,6 +1257,10 @@ body.modal-open {
   }
 
   .rules-items-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rules-snakes-grid {
     grid-template-columns: 1fr;
   }
 
