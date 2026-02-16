@@ -303,6 +303,14 @@ body.race-screen-active .app-header h1.title-snake-wave {
   transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
 }
 
+.btn,
+.card,
+.rules-modal__close,
+.about-modal__close {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(255, 255, 255, 0.08);
+}
+
 .btn:hover:not(:disabled) {
   transform: translateY(-1px);
 }
@@ -357,9 +365,78 @@ body.race-screen-active .app-header h1.title-snake-wave {
   font-size: 0.84rem;
 }
 
+.card--snake {
+  text-align: left;
+}
+
+.snake-card__header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.snake-card__preview {
+  position: relative;
+  width: 94px;
+  height: 56px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.15), rgba(18, 20, 24, 0.72));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 6px 12px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.snake-card__segment,
+.snake-card__head {
+  position: absolute;
+  image-rendering: auto;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.4));
+}
+
+.snake-card__segment {
+  width: 25px;
+  height: 25px;
+  opacity: 0.94;
+}
+
+.snake-card__segment--tail {
+  left: 6px;
+  top: 16px;
+}
+
+.snake-card__segment--mid {
+  left: 24px;
+  top: 12px;
+}
+
+.snake-card__segment--front {
+  left: 42px;
+  top: 10px;
+}
+
+.snake-card__head {
+  width: 32px;
+  height: 32px;
+  left: 60px;
+  top: 8px;
+  transform: rotate(6deg);
+}
+
 .card.selected {
   border-color: var(--accent-2);
   box-shadow: 0 0 0 1px rgba(115, 255, 150, 0.6), 0 14px 20px rgba(115, 255, 150, 0.1);
+}
+
+.card--snake.selected .snake-card__preview {
+  border-color: rgba(255, 238, 150, 0.76);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    0 8px 16px rgba(126, 245, 255, 0.18);
 }
 
 .actions {
@@ -390,7 +467,8 @@ body.race-screen-active .app-header h1.title-snake-wave {
 
 .race-layout {
   position: relative;
-  width: fit-content;
+  width: max-content;
+  max-width: 100%;
   margin: 0 auto;
 }
 
@@ -409,6 +487,8 @@ body.race-screen-active .app-header h1.title-snake-wave {
     inset 0 0 0 1px rgba(255, 235, 210, 0.08);
   background: #1f2f1c;
   overflow: hidden;
+  display: block;
+  margin: 0 auto;
 }
 
 #race-stage canvas {
@@ -617,7 +697,7 @@ body.race-screen-active .app-header h1.title-snake-wave {
 }
 
 .race-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   display: none;
   align-items: center;
@@ -634,6 +714,8 @@ body.race-screen-active .app-header h1.title-snake-wave {
   opacity: 0;
   transform: scale(1);
   pointer-events: none;
+  border-radius: 16px;
+  z-index: 24;
 }
 
 .race-overlay.visible {
@@ -950,12 +1032,6 @@ body.modal-open {
 }
 
 @media (max-width: 990px) {
-  .race-layout {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-  }
-
   #race-stage {
     width: min(98vw, calc(82dvh * 1.5806)) !important;
     max-height: 82dvh;
@@ -1114,29 +1190,7 @@ body.modal-open {
   }
 
   body.race-screen-active .hud-overlay-layer {
-    position: fixed;
     inset: 6px;
-    z-index: 20;
-  }
-
-  body.race-screen-active .hud-cluster--tl {
-    top: 0;
-    left: 0;
-  }
-
-  body.race-screen-active .hud-cluster--tr {
-    top: 0;
-    right: 0;
-  }
-
-  body.race-screen-active .hud-cluster--bl {
-    left: 0;
-    bottom: 0;
-  }
-
-  body.race-screen-active .hud-cluster--br {
-    right: 0;
-    bottom: 0;
   }
 
   body.race-screen-active .touch-controls {

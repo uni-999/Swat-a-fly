@@ -31,6 +31,7 @@ export function createUiFlowApi({
   const TOUCH_JOYSTICK_RADIUS_PX = 46;
   const TOUCH_TURN_DEADZONE = 0.12;
   const TOUCH_THROTTLE_DEADZONE = 0.08;
+  const PRESS_DEBOUNCE_MS = 140;
   let onlineInputPumpId = null;
   let lastOnlineInputSignature = "";
   let lastOnlineInputSentAtMs = 0;
@@ -151,12 +152,44 @@ export function createUiFlowApi({
     syncModalBodyLock();
   }
 
+  function bindPress(target, handler) {
+    if (!target || typeof handler !== "function") {
+      return;
+    }
+
+    let lastHandledAtMs = 0;
+    const run = (event) => {
+      if (target.disabled || target.getAttribute?.("aria-disabled") === "true") {
+        return;
+      }
+      const nowMs = typeof performance !== "undefined" ? performance.now() : Date.now();
+      if (nowMs - lastHandledAtMs < PRESS_DEBOUNCE_MS) {
+        return;
+      }
+      lastHandledAtMs = nowMs;
+      handler(event);
+    };
+
+    target.addEventListener("click", run);
+    if (typeof window !== "undefined" && "PointerEvent" in window) {
+      target.addEventListener("pointerup", (event) => {
+        if (event.pointerType === "mouse") {
+          return;
+        }
+        run(event);
+      });
+      return;
+    }
+
+    target.addEventListener("touchend", run, { passive: true });
+  }
+
   function initRulesModalUi() {
     if (ui.rulesButton) {
-      ui.rulesButton.addEventListener("click", () => openRulesModal());
+      bindPress(ui.rulesButton, () => openRulesModal());
     }
     if (ui.rulesClose) {
-      ui.rulesClose.addEventListener("click", () => closeRulesModal());
+      bindPress(ui.rulesClose, () => closeRulesModal());
     }
     if (ui.rulesModal) {
       ui.rulesModal.addEventListener("click", (event) => {
@@ -169,10 +202,10 @@ export function createUiFlowApi({
 
   function initAboutModalUi() {
     if (ui.aboutButton) {
-      ui.aboutButton.addEventListener("click", () => openAboutModal());
+      bindPress(ui.aboutButton, () => openAboutModal());
     }
     if (ui.aboutClose) {
-      ui.aboutClose.addEventListener("click", () => closeAboutModal());
+      bindPress(ui.aboutClose, () => closeAboutModal());
     }
     if (ui.aboutModal) {
       ui.aboutModal.addEventListener("click", (event) => {
@@ -298,9 +331,15 @@ export function createUiFlowApi({
         return;
       }
       touchJoystickPointerId = event.pointerId;
-      ui.touchJoystick.setPointerCapture(event.pointerId);
+      try {
+        ui.touchJoystick.setPointerCapture(event.pointerId);
+      } catch (error) {
+        // Some mobile browsers can throw on pointer capture transitions.
+      }
       applyTouchJoystickFromPointer(event);
-      event.preventDefault();
+      if (event.cancelable) {
+        event.preventDefault();
+      }
     });
 
     ui.touchJoystick.addEventListener("pointermove", (event) => {
@@ -308,15 +347,20 @@ export function createUiFlowApi({
         return;
       }
       applyTouchJoystickFromPointer(event);
-      event.preventDefault();
+      if (event.cancelable) {
+        event.preventDefault();
+      }
     });
 
     const clearPointer = (event) => {
-      if (touchJoystickPointerId !== event.pointerId) {
+      const eventPointerId = Number(event?.pointerId);
+      if (Number.isFinite(eventPointerId) && touchJoystickPointerId !== eventPointerId) {
         return;
       }
       clearTouchJoystickControl();
-      event.preventDefault();
+      if (event?.cancelable) {
+        event.preventDefault();
+      }
     };
 
     ui.touchJoystick.addEventListener("pointerup", clearPointer);
@@ -533,7 +577,7 @@ export function createUiFlowApi({
     }
 
     if (ui.onlineRoomRefresh) {
-      ui.onlineRoomRefresh.addEventListener("click", () => {
+      bindPress(ui.onlineRoomRefresh, () => {
         void refreshOnlineRooms();
       });
     }
@@ -887,7 +931,7 @@ export function createUiFlowApi({
     renderLeaderboardTrackOptions();
     renderLeaderboardRows([]);
 
-    document.getElementById("btn-offline").addEventListener("click", () => {
+    bindPress(document.getElementById("btn-offline"), () => {
       state.playMode = "offline";
       state.onlineRoomId = "";
       resetOnlineFinishWatchers();
@@ -896,7 +940,7 @@ export function createUiFlowApi({
       showToast("Офлайн-режим активирован.");
     });
 
-    document.getElementById("btn-online").addEventListener("click", () => {
+    bindPress(document.getElementById("btn-online"), () => {
       state.playMode = "online";
       showScreen("snake");
       showToast("Онлайн MVP: выбери змею и трассу, затем нажми Старт для подключения к комнате.");
@@ -905,7 +949,7 @@ export function createUiFlowApi({
       }
     });
 
-    document.getElementById("btn-leaderboards").addEventListener("click", () => {
+    bindPress(document.getElementById("btn-leaderboards"), () => {
       const baseTrack = resolveTrackDef(state.selectedTrackId || TRACK_DEFS[0]?.id);
       if (baseTrack) {
         state.leaderboardTrackId = baseTrack.id;
@@ -916,29 +960,29 @@ export function createUiFlowApi({
     });
 
     if (ui.modeClassic) {
-      ui.modeClassic.addEventListener("click", () => setOfflineMode(OFFLINE_MODES.CLASSIC));
+      bindPress(ui.modeClassic, () => setOfflineMode(OFFLINE_MODES.CLASSIC));
     }
     if (ui.modeDebug) {
-      ui.modeDebug.addEventListener("click", () => setOfflineMode(OFFLINE_MODES.DEBUG));
+      bindPress(ui.modeDebug, () => setOfflineMode(OFFLINE_MODES.DEBUG));
     }
 
-    document.getElementById("snake-back").addEventListener("click", () => showScreen("main"));
-    document.getElementById("snake-next").addEventListener("click", () => showScreen("track"));
-    document.getElementById("track-back").addEventListener("click", () => showScreen("snake"));
-    document.getElementById("track-start").addEventListener("click", () => {
+    bindPress(document.getElementById("snake-back"), () => showScreen("main"));
+    bindPress(document.getElementById("snake-next"), () => showScreen("track"));
+    bindPress(document.getElementById("track-back"), () => showScreen("snake"));
+    bindPress(document.getElementById("track-start"), () => {
       if (!state.selectedTrackId) {
         return;
       }
       void startRace(state.selectedTrackId);
     });
 
-    document.getElementById("results-retry").addEventListener("click", () => {
+    bindPress(document.getElementById("results-retry"), () => {
       if (state.selectedTrackId) {
         void startRace(state.selectedTrackId);
       }
     });
 
-    document.getElementById("results-next").addEventListener("click", () => {
+    bindPress(document.getElementById("results-next"), () => {
       if (!TRACK_DEFS.length) {
         return;
       }
@@ -948,7 +992,7 @@ export function createUiFlowApi({
       void startRace(nextTrack.id);
     });
 
-    document.getElementById("results-back").addEventListener("click", () => {
+    bindPress(document.getElementById("results-back"), () => {
       resetOnlineFinishWatchers();
       void disconnectOnlineRace?.();
       state.race = null;
@@ -968,14 +1012,14 @@ export function createUiFlowApi({
     }
 
     if (ui.leaderboardRefresh) {
-      ui.leaderboardRefresh.addEventListener("click", () => {
+      bindPress(ui.leaderboardRefresh, () => {
         void refreshLeaderboard();
       });
     }
 
     const leaderboardBack = document.getElementById("leaderboard-back");
     if (leaderboardBack) {
-      leaderboardBack.addEventListener("click", () => showScreen("main"));
+      bindPress(leaderboardBack, () => showScreen("main"));
     }
 
     window.addEventListener("keydown", onKeyDown, { passive: false });
@@ -1083,22 +1127,38 @@ export function createUiFlowApi({
     syncRaceMusic();
   }
 
+  function getSnakeSpritePath(snakeId, fileName) {
+    return `/assets/sprites/snakes/${snakeId}/${fileName}`;
+  }
+
   function renderSnakeCards() {
     ui.snakeCards.innerHTML = "";
     for (const snake of SNAKES) {
+      const headSprite = getSnakeSpritePath(snake.id, "head.png");
+      const segmentSprite = getSnakeSpritePath(snake.id, "segment.png");
       const card = document.createElement("button");
-      card.className = "card";
+      card.className = "card card--snake";
       card.type = "button";
       card.innerHTML = `
-      <h3 style="color:${snake.color}">${snake.name}</h3>
-      <p>${snake.flavor}</p>
+      <div class="snake-card__header">
+        <div class="snake-card__preview" aria-hidden="true">
+          <img class="snake-card__segment snake-card__segment--tail" src="${segmentSprite}" alt="">
+          <img class="snake-card__segment snake-card__segment--mid" src="${segmentSprite}" alt="">
+          <img class="snake-card__segment snake-card__segment--front" src="${segmentSprite}" alt="">
+          <img class="snake-card__head" src="${headSprite}" alt="${snake.name}">
+        </div>
+        <div>
+          <h3 style="color:${snake.color}">${snake.name}</h3>
+          <p>${snake.flavor}</p>
+        </div>
+      </div>
       <ul>
         <li>maxSpeed: ${Math.round(snake.stats.maxSpeed)}</li>
         <li>turnRate: ${snake.stats.turnRate.toFixed(2)}</li>
         <li>offroadPenalty: ${(snake.stats.offroadPenalty * 100).toFixed(0)}%</li>
       </ul>
     `;
-      card.addEventListener("click", () => {
+      bindPress(card, () => {
         state.selectedSnakeId = snake.id;
         ui.snakeNext.disabled = false;
         [...ui.snakeCards.children].forEach((node) => node.classList.remove("selected"));
@@ -1133,7 +1193,7 @@ export function createUiFlowApi({
         <li>Road width: ${track.roadWidth}</li>
       </ul>
       `;
-      card.addEventListener("click", () => {
+      bindPress(card, () => {
         const previousTrackId = state.selectedTrackId;
         state.selectedTrackId = track.id;
         ui.trackStart.disabled = false;
