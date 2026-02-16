@@ -29,6 +29,9 @@ export function createUiFlowApi({
   let lastOnlineInputSignature = "";
   let lastOnlineInputSentAtMs = 0;
   let lastHandledOnlineFinishKey = "";
+  let onlineNoProgressSinceMs = 0;
+  let onlineLastMaxProgress = 0;
+  let onlineProgressWatchKey = "";
   let leaderboardLoading = false;
 
   function normalizePlayerName(rawName) {
@@ -838,6 +841,7 @@ export function createUiFlowApi({
         trackId: trackDef.id,
         playerName: getResolvedPlayerName() || `Player (${selectedSnake.name})`,
         roomId: selectedRoomId,
+        snakeId: selectedSnake.id,
       });
 
       if (!connectResult?.ok) {

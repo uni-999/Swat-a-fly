@@ -6,6 +6,8 @@ import { buildTrackRuntime, sampleTrack, projectOnTrack } from "../shared-game/t
 const DEFAULT_TRACK_LENGTH = 12000;
 const COUNTDOWN_MS = 3000;
 const LAPS_TO_FINISH = 0;
+const NO_PROGRESS_FINISH_WINDOW_MS = 14000;
+const NO_PROGRESS_EPS_METERS = 12;
 
 const STEER_RESPONSE_PER_SEC = 30.0;
 const BASE_TURN_RATE = 2.9;
@@ -53,6 +55,20 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 function safeNumber(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function asBool(value, fallback = false) {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  return fallback;
 }
 
 function normalizeTrackId(trackId) {
@@ -219,12 +235,17 @@ export class RaceRoom extends Room {
 
     this.players = new Map();
     this.phase = "lobby";
+    this.finishReason = null;
     this.tickIndex = 0;
     this.lastTickAtMs = Date.now();
+    this.lastProgressMaxMeters = 0;
+    this.lastProgressAdvanceAtMs = this.lastTickAtMs;
     this.countdownEndsAtMs = 0;
     this.raceStartedAtMs = 0;
     this.raceEndedAtMs = 0;
     this.resultsSubmitted = false;
+    this.debugLogsEnabled = asBool(process.env.RACE_DEBUG_LOGS, true);
+    this.debugLogEveryTicks = Math.max(1, Math.floor(safeNumber(process.env.RACE_DEBUG_EVERY_TICKS, 120)));
 
     this.setPrivate(false);
     this.setMetadata({ trackId: this.trackId, phase: this.phase, tickRate: this.tickRate });
@@ -236,6 +257,13 @@ export class RaceRoom extends Room {
     });
 
     this.clock.setInterval(() => this.tick(), Math.floor(1000 / this.tickRate));
+    this.logDebug("room_created", {
+      maxClients: this.maxClients,
+      tickRate: this.tickRate,
+      raceMaxMs: this.raceMaxMs,
+      lapsToFinish: this.lapsToFinish,
+      debugEveryTicks: this.debugLogEveryTicks,
+    });
   }
 
   onJoin(client, options) {
@@ -247,6 +275,7 @@ export class RaceRoom extends Room {
       sessionId: client.sessionId,
       userId,
       displayName,
+      typeId: options?.snakeId ? String(options.snakeId) : null,
       connected: true,
       isBot: false,
       ready: true,
@@ -265,6 +294,14 @@ export class RaceRoom extends Room {
       resultSubmitted: false,
     });
 
+    this.logDebug("player_joined", {
+      sessionId: client.sessionId,
+      userId,
+      name: displayName,
+      snakeId: options?.snakeId ? String(options.snakeId) : null,
+      players: this.players.size,
+      clients: this.clients.length,
+    });
     this.broadcastState();
   }
 
@@ -279,8 +316,18 @@ export class RaceRoom extends Room {
       player.isBot = true;
       player.ready = true;
       player.displayName = `${player.displayName} [BOT]`;
+      this.logDebug("player_disconnected_to_bot", {
+        sessionId: client.sessionId,
+        players: this.players.size,
+        clients: this.clients.length,
+      });
     } else {
       this.players.delete(client.sessionId);
+      this.logDebug("player_left", {
+        sessionId: client.sessionId,
+        players: this.players.size,
+        clients: this.clients.length,
+      });
     }
 
     this.broadcastState();
@@ -330,6 +377,10 @@ export class RaceRoom extends Room {
     this.phase = "countdown";
     this.countdownEndsAtMs = Date.now() + COUNTDOWN_MS;
     this.setMetadata({ ...this.metadata, phase: this.phase });
+    this.logDebug("phase_countdown_started", {
+      countdownMs: COUNTDOWN_MS,
+      connectedPlayers: participants.length,
+    });
   }
 
   tick() {
@@ -341,13 +392,22 @@ export class RaceRoom extends Room {
     if (this.phase === "countdown" && nowMs >= this.countdownEndsAtMs) {
       this.phase = "running";
       this.raceStartedAtMs = nowMs;
+      this.lastProgressAdvanceAtMs = nowMs;
+      this.lastProgressMaxMeters = 0;
       this.setMetadata({ ...this.metadata, phase: this.phase });
+      this.logDebug("phase_running_started", {
+        tick: this.tickIndex,
+        players: this.players.size,
+      });
     }
 
     if (this.phase === "running") {
       this.simulate(dt, nowMs);
       if (nowMs - this.raceStartedAtMs >= this.raceMaxMs) {
         this.forceFinishTimeout(nowMs);
+      }
+      if (this.tickIndex % this.debugLogEveryTicks === 0) {
+        this.logTickSummary(nowMs);
       }
     }
 
@@ -575,9 +635,35 @@ export class RaceRoom extends Room {
       }
     }
 
+    const maxProgressNow = Array.from(this.players.values()).reduce(
+      (acc, p) => Math.max(acc, safeNumber(p.progress, 0)),
+      0,
+    );
+    if (maxProgressNow > this.lastProgressMaxMeters + NO_PROGRESS_EPS_METERS) {
+      this.lastProgressMaxMeters = maxProgressNow;
+      this.lastProgressAdvanceAtMs = nowMs;
+    }
+
+    const hasLapFinisher =
+      this.lapsToFinish > 0 &&
+      Array.from(this.players.values()).some((p) => p.finished && Number.isFinite(p.finishTimeMs));
+    if (hasLapFinisher) {
+      this.forceFinishByProgress(nowMs, "lap_finish");
+      return;
+    }
+
     const unfinished = Array.from(this.players.values()).some((p) => !p.finished);
     if (!unfinished) {
-      this.finishRace(nowMs);
+      this.finishRace(nowMs, "all_finished");
+      return;
+    }
+
+    const raceElapsedMs = Math.max(0, nowMs - this.raceStartedAtMs);
+    if (
+      raceElapsedMs > 15000 &&
+      nowMs - this.lastProgressAdvanceAtMs >= NO_PROGRESS_FINISH_WINDOW_MS
+    ) {
+      this.forceFinishByProgress(nowMs, "stalled_no_progress");
     }
   }
 
@@ -591,23 +677,55 @@ export class RaceRoom extends Room {
   }
 
   forceFinishTimeout(nowMs) {
-    for (const player of this.players.values()) {
-      if (!player.finished) {
-        player.finished = true;
-        player.finishTimeMs = null;
-      }
-    }
-    this.finishRace(nowMs);
+    this.logDebug("force_finish_timeout", {
+      elapsedMs: Math.max(0, nowMs - this.raceStartedAtMs),
+      maxProgress: Math.round(this.lastProgressMaxMeters),
+    });
+    this.finalizePlayersByProgress(nowMs);
+    this.finishRace(nowMs, "timeout");
   }
 
-  finishRace(nowMs) {
+  forceFinishByProgress(nowMs, reason = "progress_finish") {
+    this.logDebug("force_finish_progress", {
+      reason,
+      elapsedMs: Math.max(0, nowMs - this.raceStartedAtMs),
+      maxProgress: Math.round(this.lastProgressMaxMeters),
+      noProgressForMs: Math.max(0, nowMs - this.lastProgressAdvanceAtMs),
+    });
+    this.finalizePlayersByProgress(nowMs);
+    this.finishRace(nowMs, reason);
+  }
+
+  finalizePlayersByProgress(nowMs) {
+    const elapsedMs = Math.max(0, nowMs - this.raceStartedAtMs);
+    const players = Array.from(this.players.values());
+    const bestProgress = players.reduce((acc, p) => Math.max(acc, safeNumber(p.progress, 0)), 0);
+    for (const player of players) {
+      if (!player.finished) {
+        player.finished = true;
+      }
+      if (!Number.isFinite(player.finishTimeMs)) {
+        const progressGap = Math.max(0, bestProgress - safeNumber(player.progress, 0));
+        const progressPenaltyMs = Math.round(progressGap * 14);
+        player.finishTimeMs = elapsedMs + progressPenaltyMs;
+      }
+    }
+  }
+
+  finishRace(nowMs, reason = "finished") {
     if (this.phase === "finished") {
       return;
     }
 
     this.phase = "finished";
+    this.finishReason = reason;
     this.raceEndedAtMs = nowMs;
-    this.setMetadata({ ...this.metadata, phase: this.phase });
+    this.setMetadata({ ...this.metadata, phase: this.phase, finishReason: this.finishReason });
+    this.logDebug("phase_finished", {
+      reason: this.finishReason,
+      elapsedMs: Math.max(0, nowMs - this.raceStartedAtMs),
+      players: this.summarizePlayersForLog(),
+    });
     this.submitResults().catch((error) => {
       console.error("[match-server] submitResults failed:", error);
     });
@@ -671,6 +789,7 @@ export class RaceRoom extends Room {
         sessionId: p.sessionId,
         userId: p.userId,
         displayName: p.displayName,
+        typeId: p.typeId || null,
         connected: p.connected,
         isBot: p.isBot,
         ready: p.ready,
@@ -712,6 +831,7 @@ export class RaceRoom extends Room {
       trackId: this.trackId,
       raceStartedAtMs: this.raceStartedAtMs,
       raceEndedAtMs: this.raceEndedAtMs,
+      finishReason: this.finishReason,
       players,
       pickups,
       bodyItems,
@@ -720,5 +840,55 @@ export class RaceRoom extends Room {
 
   broadcastState() {
     this.broadcast("snapshot", this.buildSnapshot());
+  }
+
+  summarizePlayersForLog() {
+    return Array.from(this.players.values())
+      .map((p) => ({
+        sessionId: p.sessionId,
+        name: p.displayName,
+        connected: Boolean(p.connected),
+        isBot: Boolean(p.isBot),
+        finished: Boolean(p.finished),
+        progress: Math.round(safeNumber(p.progress, 0)),
+        speed: Math.round(safeNumber(p.speed, 0)),
+        finishTimeMs: Number.isFinite(p.finishTimeMs) ? Math.round(p.finishTimeMs) : null,
+      }))
+      .sort((a, b) => b.progress - a.progress);
+  }
+
+  logTickSummary(nowMs) {
+    const players = Array.from(this.players.values());
+    const maxProgress = players.reduce((acc, p) => Math.max(acc, safeNumber(p.progress, 0)), 0);
+    const avgSpeed =
+      players.length > 0
+        ? players.reduce((sum, p) => sum + safeNumber(p.speed, 0), 0) / players.length
+        : 0;
+    const finishedCount = players.filter((p) => p.finished).length;
+    const connectedCount = players.filter((p) => p.connected).length;
+    this.logDebug("tick_summary", {
+      tick: this.tickIndex,
+      elapsedMs: this.raceStartedAtMs > 0 ? Math.max(0, nowMs - this.raceStartedAtMs) : 0,
+      connected: connectedCount,
+      finished: finishedCount,
+      avgSpeed: Number(avgSpeed.toFixed(2)),
+      maxProgress: Number(maxProgress.toFixed(2)),
+      noProgressForMs: Math.max(0, nowMs - this.lastProgressAdvanceAtMs),
+    });
+  }
+
+  logDebug(event, payload = {}) {
+    if (!this.debugLogsEnabled) {
+      return;
+    }
+    const entry = {
+      ts: new Date().toISOString(),
+      roomId: this.roomId || null,
+      trackId: this.trackId,
+      phase: this.phase,
+      event,
+      ...payload,
+    };
+    console.log(`[race-room] ${JSON.stringify(entry)}`);
   }
 }

@@ -24,6 +24,8 @@ services:
       NAKAMA_HTTP_KEY: "${NAKAMA_HTTP_KEY:-dev-http-key}"
       NAKAMA_RPC_ID: "${NAKAMA_RPC_ID:-submit_race_time}"
       NAKAMA_LEADERBOARD_RPC_ID: "${NAKAMA_LEADERBOARD_RPC_ID:-get_track_leaderboard}"
+      RACE_DEBUG_LOGS: "${RACE_DEBUG_LOGS:-1}"
+      RACE_DEBUG_EVERY_TICKS: "${RACE_DEBUG_EVERY_TICKS:-120}"
       RACE_DURATION_STATS_FILE: "/app/_data/race-duration-stats.json"
       RACE_DURATION_STATS_EMA_ALPHA: "0.24"
     volumes:

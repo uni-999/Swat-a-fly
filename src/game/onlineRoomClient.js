@@ -328,6 +328,7 @@ export function createOnlineRoomClientApi({ state } = {}) {
     playerName = "Player",
     userId = null,
     roomId = "",
+    snakeId = null,
   } = {}) {
     if (!trackId) {
       return { ok: false, error: "track_id_required" };
@@ -370,12 +371,14 @@ export function createOnlineRoomClientApi({ state } = {}) {
               trackId,
               userId: onlineUserId,
               name: playerName,
+              snakeId: snakeId || undefined,
             });
           } else {
             room = await client.joinOrCreate("race", {
               trackId,
               userId: onlineUserId,
               name: playerName,
+              snakeId: snakeId || undefined,
             });
           }
           endpoint = candidate;
